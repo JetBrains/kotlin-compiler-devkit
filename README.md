@@ -93,6 +93,21 @@ represents the source set root which is always present for every source set.
 This action will copy the selected testdata text in the editor with stripped metadata: 
 diagnostics and tags like `<caret>`, `<expr>`, `<selection>`. You can also assign a custom shortcut to this action.
 
+### Rebasing and Checkout on Green `master` Commit
+
+> **Note:** Requires the bundled Git plugin to be enabled.
+
+![Green master actions](pic/green_master_actions.png)
+
+#### Rebase On Latest Green Master Commit
+
+Rebases the current branch onto the latest successfully built commit from `master`.
+All pending local changes are automatically stashed. 
+
+#### Checkout To Latest Green Commit
+
+Resets the `master` branch to the latest successfully built commit.
+
 <!-- Plugin description end -->
 
 ## Build plugin from sources
