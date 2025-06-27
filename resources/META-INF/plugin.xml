@@ -6,6 +6,7 @@
     <depends>com.intellij.java</depends>
     <depends>com.intellij.gradle</depends>
     <depends>org.jetbrains.plugins.gradle</depends>
+    <depends optional="true" config-file="git4idea-integration.xml">Git4Idea</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
