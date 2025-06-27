@@ -122,7 +122,10 @@ tasks {
     }
     withType<KotlinCompile> {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
-        compilerOptions.freeCompilerArgs.add("-opt-in=kotlin.RequiresOptIn")
+        compilerOptions.freeCompilerArgs.addAll(listOf(
+            "-opt-in=kotlin.RequiresOptIn",
+            "-Xcontext-parameters"
+        ))
     }
 
     withType<Detekt> {
