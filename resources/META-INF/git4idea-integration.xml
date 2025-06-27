@@ -1,3 +1,10 @@
 ﻿<idea-plugin>
 
+    <actions>
+        <action id="GitResetToGreenMasterAction"
+                class="org.jetbrains.kotlin.test.helper.actions.GitResetToGreenMasterAction"
+                icon="AllIcons.Vcs.CommitNode">
+            <add-to-group group-id="Git.Branch" anchor="first"/>
+        </action>
+    </actions>
 </idea-plugin>
