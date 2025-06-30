@@ -27,7 +27,8 @@ abstract class GitKotlinMasterAction : GitSingleBranchAction() {
     override val disabledForRemote = true
 
     override fun isEnabledForRef(ref: GitBranch, repositories: List<GitRepository>) =
-        chooseRepository(repositories)?.isPublicKotlinMonorepo() == true
+        repositories.all { it.isOnBranch }
+            && chooseRepository(repositories)?.isPublicKotlinMonorepo() == true
             && ref.name == MAIN_BRANCH
             && super.isEnabledForRef(ref, repositories)
 
