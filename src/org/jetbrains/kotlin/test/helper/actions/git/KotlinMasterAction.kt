@@ -1,4 +1,4 @@
-﻿package org.jetbrains.kotlin.test.helper.actions
+﻿package org.jetbrains.kotlin.test.helper.actions.git
 
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
@@ -9,7 +9,7 @@ import git4idea.repo.GitRemote
 import git4idea.repo.GitRepository
 import kotlinx.coroutines.launch
 
-abstract class GitKotlinMasterAction : GitSingleBranchAction() {
+abstract class KotlinMasterAction : GitSingleBranchAction() {
     companion object {
         protected const val MAIN_BRANCH = "master"
         protected const val DEFAULT_ORIGIN = "origin"

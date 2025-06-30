@@ -1,4 +1,4 @@
-﻿package org.jetbrains.kotlin.test.helper.actions
+﻿package org.jetbrains.kotlin.test.helper.actions.git
 
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
@@ -12,7 +12,7 @@ import git4idea.ui.branch.GitBranchPopupActions.getCurrentBranchTruncatedPresent
 import org.jetbrains.kotlin.test.helper.MyBundle
 import org.jetbrains.kotlin.test.helper.git.Git
 
-class GitRebaseOnGreenMasterAction : GitKotlinMasterAction() {
+class RebaseOnGreenMasterAction : KotlinMasterAction() {
     override fun isEnabledForRef(ref: GitBranch, repositories: List<GitRepository>): Boolean {
         // Disable self-rebasing `master` on `master`
         return chooseRepository(repositories)?.currentBranch?.name != MAIN_BRANCH
