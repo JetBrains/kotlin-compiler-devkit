@@ -7,6 +7,8 @@ import com.intellij.platform.util.progress.reportProgressScope
 import git4idea.GitBranch
 import git4idea.GitNotificationIdsHolder
 import git4idea.repo.GitRepository
+import git4idea.ui.branch.GitBranchPopupActions.addTooltipText
+import git4idea.ui.branch.GitBranchPopupActions.getCurrentBranchTruncatedPresentation
 import org.jetbrains.kotlin.test.helper.MyBundle
 import org.jetbrains.kotlin.test.helper.git.Git
 
@@ -15,6 +17,25 @@ class GitRebaseOnGreenMasterAction : GitKotlinMasterAction() {
         // Disable self-rebasing `master` on `master`
         return chooseRepository(repositories)?.currentBranch?.name != MAIN_BRANCH
             && super.isEnabledForRef(ref, repositories)
+    }
+
+    // Suppressed because the analyzer still complains against 'action.GitRebaseOnGreenMasterAction.text'
+    // for some reason.
+    // The capitalization is kept in sync with the Git plugin one.
+    @Suppress("DialogTitleCapitalization")
+    override fun updateIfEnabledAndVisible(
+        e: AnActionEvent,
+        project: Project,
+        repositories: List<GitRepository>,
+        reference: GitBranch
+    ) {
+        with(e.presentation) {
+            text = MyBundle.message(
+                "action.GitRebaseOnGreenMasterAction.text",
+                getCurrentBranchTruncatedPresentation(project, repositories))
+            description = MyBundle.message("action.GitRebaseOnGreenMasterAction.description")
+            addTooltipText(this, description)
+        }
     }
 
     @Suppress("UnstableApiUsage")
