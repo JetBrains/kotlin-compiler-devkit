@@ -1,14 +1,15 @@
 ﻿<idea-plugin>
     <actions>
-        <action id="GitResetToGreenMasterAction"
-                class="org.jetbrains.kotlin.test.helper.actions.GitResetToGreenMasterAction"
-                icon="AllIcons.Vcs.CommitNode">
-            <add-to-group group-id="Git.Branch" anchor="first"/>
-        </action>
         <action id="GitRebaseOnGreenMasterAction"
                 class="org.jetbrains.kotlin.test.helper.actions.GitRebaseOnGreenMasterAction"
                 icon="AllIcons.Vcs.CommitNode">
-            <add-to-group group-id="Git.Branch" anchor="first"/>
+            <add-to-group group-id="Git.Branch" anchor="after" relative-to-action="GitRebaseBranchAction"/>
+        </action>
+
+        <action id="GitResetToGreenMasterAction"
+                class="org.jetbrains.kotlin.test.helper.actions.GitResetToGreenMasterAction"
+                icon="AllIcons.Vcs.CommitNode">
+            <add-to-group group-id="Git.Branch" anchor="after" relative-to-action="GitRebaseOnGreenMasterAction"/>
         </action>
     </actions>
 </idea-plugin>
