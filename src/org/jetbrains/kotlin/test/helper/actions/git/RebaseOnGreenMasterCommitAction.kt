@@ -16,10 +16,6 @@ class RebaseOnGreenMasterCommitAction : KotlinMasterAction() {
             && super.isEnabledForRef(ref, repositories)
     }
 
-    // Suppressed because the analyzer still complains against 'action.GitRebaseOnGreenMasterAction.text'
-    // for some reason.
-    // The capitalization is kept in sync with the Git plugin one.
-    @Suppress("DialogTitleCapitalization")
     override fun updateIfEnabledAndVisible(
         e: AnActionEvent,
         project: Project,
