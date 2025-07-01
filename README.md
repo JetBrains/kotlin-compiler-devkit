@@ -99,14 +99,15 @@ diagnostics and tags like `<caret>`, `<expr>`, `<selection>`. You can also assig
 
 ![Green master actions](pic/green_master_actions.png)
 
-#### Rebase On Latest Green Master Commit
+#### Rebase onto the Latest Green `master`
 
 Rebases the current branch onto the latest successfully built commit from `master`.
-All pending local changes are automatically stashed. 
+All pending local changes are automatically stashed.
 
-#### Checkout To Latest Green Commit
+#### Reset to the Latest Green Commit
 
 Resets the `master` branch to the latest successfully built commit.
+Doesn't modify or change the current branch.
 
 <!-- Plugin description end -->
 
