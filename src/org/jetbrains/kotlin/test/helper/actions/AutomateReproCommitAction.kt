@@ -34,6 +34,18 @@ import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.nio.file.Paths
 
+/**
+ * Action that automates the process of creating a repro commit for a given ticket.
+ * 
+ * This action performs the following workflow:
+ * 1. Prompts user for a ticket number
+ * 2. Generates tests using appropriate gradle tasks  
+ * 3. Runs tests iteratively, applying diffs after each failure
+ * 4. Repeats until all tests pass (up to 10 iterations)
+ * 5. Commits all changes with the ticket number in the commit message
+ * 
+ * The action is available in various context menus when test data files are selected.
+ */
 class AutomateReproCommitAction : RunSelectedFilesActionBase() {
     
     companion object {
@@ -52,12 +64,22 @@ class AutomateReproCommitAction : RunSelectedFilesActionBase() {
         // Ask for ticket number
         val ticketNumber = Messages.showInputDialog(
             project,
-            "Enter ticket number:",
+            "Enter ticket number (e.g., KT-12345):",
             "Automate Repro Commit",
             Messages.getQuestionIcon()
         )
         
         if (ticketNumber.isNullOrBlank()) {
+            return
+        }
+        
+        // Validate ticket number format (basic validation)
+        if (!ticketNumber.matches(Regex("^[A-Z]+-\\d+$"))) {
+            Messages.showWarningDialog(
+                project,
+                "Invalid ticket number format. Please use format like 'KT-12345'.",
+                "Invalid Ticket Number"
+            )
             return
         }
         
@@ -102,13 +124,17 @@ class AutomateReproCommitAction : RunSelectedFilesActionBase() {
         indicator.fraction = 0.2
         
         // Step 2: Run tests and apply diffs iteratively until green
-        runTestsUntilGreen(project, selectedFiles, indicator)
+        val finalTestsPass = runTestsUntilGreen(project, selectedFiles, indicator)
+        
+        if (!finalTestsPass) {
+            throw RuntimeException("Tests did not pass after maximum iterations")
+        }
         
         indicator.text = "Step 5/5: Committing changes..."
         indicator.fraction = 0.9
         
         // Step 5: Commit changes
-        commitChanges(project, ticketNumber, indicator)
+        commitChanges(project, selectedFiles, ticketNumber, indicator)
         
         indicator.text = "Automated repro commit completed!"
         indicator.fraction = 1.0
@@ -175,7 +201,7 @@ class AutomateReproCommitAction : RunSelectedFilesActionBase() {
         project: Project,
         selectedFiles: List<VirtualFile>,
         indicator: ProgressIndicator
-    ) {
+    ): Boolean {
         var iteration = 1
         val maxIterations = 10
         
@@ -216,7 +242,7 @@ class AutomateReproCommitAction : RunSelectedFilesActionBase() {
             
             if (testsPassed) {
                 logger.info("All tests passed!")
-                break
+                return true
             } else {
                 logger.info("Tests failed, applying diffs...")
                 
@@ -234,12 +260,15 @@ class AutomateReproCommitAction : RunSelectedFilesActionBase() {
             }
         }
         
-        if (iteration > maxIterations) {
-            throw RuntimeException("Could not get tests to pass after $maxIterations iterations")
-        }
+        return false
     }
     
-    private fun commitChanges(project: Project, ticketNumber: String, indicator: ProgressIndicator) {
+    private fun commitChanges(
+        project: Project, 
+        selectedFiles: List<VirtualFile>,
+        ticketNumber: String, 
+        indicator: ProgressIndicator
+    ) {
         val repositoryManager = GitRepositoryManager.getInstance(project)
         val repository = repositoryManager.repositories.firstOrNull()
             ?: throw RuntimeException("No Git repository found")
@@ -256,7 +285,9 @@ class AutomateReproCommitAction : RunSelectedFilesActionBase() {
         }
         
         // Commit changes
-        val commitMessage = "Automated repro commit for $ticketNumber"
+        val commitMessage = "Automated repro commit for $ticketNumber\n\n" +
+                "Generated tests and applied diffs for ${selectedFiles.size} test file(s).\n" +
+                "All tests are now passing."
         val commitHandler = GitLineHandler(project, repository.root, GitCommand.COMMIT)
         commitHandler.addParameters("-m", commitMessage)
         val commitResult = git.runCommand(commitHandler)
