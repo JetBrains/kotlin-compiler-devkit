@@ -108,5 +108,15 @@
                 description="Applies the diff between the expected value and the actual file">
             <add-to-group group-id="TestTreePopupMenu" anchor="last" />
         </action>
+
+        <action id="AutomateReproCommit"
+                class="org.jetbrains.kotlin.test.helper.actions.AutomateReproCommitAction"
+                text="Automate Repro Commit"
+                description="Automatically generate tests, run them, apply diffs, and commit changes with ticket number">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="NavbarPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenuEx" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
