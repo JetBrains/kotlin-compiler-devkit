@@ -162,7 +162,7 @@ object Git {
         coroutineToIndicator {
             git.runCommand {
                 GitLineHandler(project, repository.root, GitCommand.REBASE).apply {
-                    if (autoStash) addParameters("--autosquash")
+                    if (autoStash) addParameters("--autostash")
                     addParameters(revision)
                 }
             }.success()
