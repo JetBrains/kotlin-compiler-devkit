@@ -35,6 +35,7 @@ enum class TestDataType {
     File,
     Directory,
     DirectoryOfFiles,
+    RelatedFile,
 }
 
 fun VirtualFile.getTestDataType(project: Project): TestDataType? {
@@ -44,6 +45,7 @@ fun VirtualFile.getTestDataType(project: Project): TestDataType? {
         return when {
             extension in supportedExtensions -> TestDataType.File
             isDirectory -> TestDataType.DirectoryOfFiles
+            supportedExtensions.any { parent.findChild("$nameWithoutAllExtensions.$it") != null } -> TestDataType.RelatedFile
             else -> null
         }
     }
