@@ -26,6 +26,7 @@ import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
 import org.jetbrains.kotlin.test.helper.actions.ChooseAdditionalFileAction
 import org.jetbrains.kotlin.test.helper.actions.GeneratedTestComboBoxAction
+import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.state.PreviewEditorState
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
@@ -45,7 +46,7 @@ class TestDataEditor(
 
     private val previewEditorState: PreviewEditorState = PreviewEditorState(
         baseEditor,
-        PropertiesComponent.getInstance().getValue(lastUsedPreviewPropertyName)?.toIntOrNull() ?: 0,
+        PropertiesComponent.getInstance().getValue(lastUsedPreviewPropertyName),
         this,
     )
 
@@ -108,7 +109,7 @@ class TestDataEditor(
         PropertiesComponent.getInstance()
             .setValue(
                 lastUsedPreviewPropertyName,
-                previewEditorState.currentPreviewIndex.toString()
+                previewEditorState.currentPreview.file.allExtensions
             )
         baseEditor.component.isVisible = true
         previewEditorState.currentPreview.component.isVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor

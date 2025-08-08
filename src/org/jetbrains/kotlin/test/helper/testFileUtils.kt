@@ -70,6 +70,7 @@ val String.asPathWithoutAllExtensions: String
     }
 
 val VirtualFile.nameWithoutAllExtensions get() = name.asPathWithoutAllExtensions
+val VirtualFile.allExtensions get() = name.substring(nameWithoutAllExtensions.length)
 
 fun AnActionEvent.toFileNamesString(): String? {
     val project = project ?: return null

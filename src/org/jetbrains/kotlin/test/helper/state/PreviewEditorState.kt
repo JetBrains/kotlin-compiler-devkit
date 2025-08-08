@@ -6,21 +6,34 @@ import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
+import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.simpleNameUntilFirstDot
 
 class PreviewEditorState(
     private val baseEditor: TextEditor,
-    currentPreview: Int,
+    currentPreviewExtension: String?,
     private val parent: Disposable,
 ) {
     var previewEditors: List<FileEditor> = findPreviewEditors()
         private set
 
-    var currentPreviewIndex: Int = calculateIndex(currentPreview)
-        private set
+    var currentPreviewIndex: Int = 0
+        private set(value) {
+            field = if (value !in previewEditors.indices) {
+                0
+            } else {
+                value
+            }
+        }
 
-    private fun calculateIndex(currentPreview: Int): Int =
-        currentPreview.takeIf { it in previewEditors.indices } ?: 0
+    init {
+        val indexByExtension = previewEditors.indexOfFirst { it.file?.allExtensions == currentPreviewExtension }
+        currentPreviewIndex = if (indexByExtension != -1) {
+            indexByExtension
+        } else {
+            previewEditors.indexOfFirst { it.file == baseEditor.file }
+        }
+    }
 
     val currentPreview: FileEditor
         get() = previewEditors.getOrNull(currentPreviewIndex) ?: run {
@@ -42,7 +55,7 @@ class PreviewEditorState(
     fun updatePreviewEditors() {
         val chosenPreview = currentPreview
         previewEditors = findPreviewEditors()
-        currentPreviewIndex = calculateIndex(previewEditors.indexOf(chosenPreview))
+        currentPreviewIndex = previewEditors.indexOf(chosenPreview)
     }
 
     private fun findPreviewEditors(): List<FileEditor> {
