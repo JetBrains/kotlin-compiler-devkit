@@ -119,5 +119,11 @@
                 description="Applies the diff between the expected value and the actual file">
             <add-to-group group-id="TestTreePopupMenu" anchor="last" />
         </action>
+
+        <action id="MigrateFailedTestsAction"
+                class="org.jetbrains.kotlin.test.helper.actions.MigrateFailedTestsAction"
+                text="Migrate">
+            <add-to-group group-id="TestTreePopupMenu" anchor="last" />
+        </action>
     </actions>
 </idea-plugin>

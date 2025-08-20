@@ -26,6 +26,7 @@ import com.intellij.psi.PsiDocumentManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.jetbrains.kotlin.test.helper.ui.migrateFile
 import java.nio.file.Paths
 import kotlin.coroutines.resume
 
@@ -48,6 +49,24 @@ internal class ApplyFileDiffAction : DumbAwareAction() {
         val project = e.project ?: return
         project.lifetime.coroutineScope.launch {
             applyDiffs(tests, project)
+        }
+    }
+}
+
+class MigrateFailedTestsAction : AnAction() {
+    override fun actionPerformed(e: AnActionEvent) {
+        val tests = AbstractTestProxy.DATA_KEYS.getData(e.dataContext) ?: return
+        val project = e.project ?: return
+
+        project.lifetime.coroutineScope.launch {
+            writeCommandAction(project, "Migrating Destructuring Test") {
+                val diffsByFile = tests.collectDiffsByFilePath()
+
+                for ((path, diffs) in diffsByFile) {
+                    val virtualFile = VfsUtil.findFile(Paths.get(path ?: continue), true) ?: continue
+                    virtualFile.migrateFile(project)
+                }
+            }
         }
     }
 }
@@ -115,10 +134,7 @@ enum class ApplyDiffResult {
 }
 
 suspend fun applyDiffs(tests: Array<out AbstractTestProxy>, project: Project): ApplyDiffResult {
-    val diffsByFile = tests
-        .flatMap { it.collectChildrenRecursively(mutableListOf()) }
-        .groupBy { it.filePath }
-        .mapValues { it.value.distinctBy { diff -> diff.right } }
+    val diffsByFile = tests.collectDiffsByFilePath()
 
     var result = if (diffsByFile.any { it.key != null }) ApplyDiffResult.SUCCESS else ApplyDiffResult.NO_DIFFS
 
@@ -153,6 +169,12 @@ suspend fun applyDiffs(tests: Array<out AbstractTestProxy>, project: Project): A
     }
 
     return result
+}
+
+private fun Array<out AbstractTestProxy>.collectDiffsByFilePath(): Map<String?, List<DiffHyperlink>> {
+    return flatMap { it.collectChildrenRecursively(mutableListOf()) }
+        .groupBy<DiffHyperlink, String> { it.filePath }
+        .mapValues { it.value.distinctBy { diff -> diff.right } }
 }
 
 private fun AbstractTestProxy.collectChildrenRecursively(list: MutableList<DiffHyperlink>): List<DiffHyperlink> {

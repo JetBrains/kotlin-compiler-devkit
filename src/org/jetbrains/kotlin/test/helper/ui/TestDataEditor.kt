@@ -9,24 +9,37 @@ import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.command.writeCommandAction
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.rd.util.lifetime
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Pair
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.*
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.pom.Navigatable
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
 import com.intellij.ui.JBSplitter
 import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
+import kotlinx.coroutines.launch
+import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.psi.KtVisitorVoid
 import org.jetbrains.kotlin.test.helper.actions.ChooseAdditionalFileAction
 import org.jetbrains.kotlin.test.helper.actions.GeneratedTestComboBoxAction
+import org.jetbrains.kotlin.test.helper.actions.allMetadataRegex
 import org.jetbrains.kotlin.test.helper.allExtensions
+import org.jetbrains.kotlin.test.helper.nameWithoutAllExtensions
 import org.jetbrains.kotlin.test.helper.state.PreviewEditorState
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
@@ -115,6 +128,49 @@ class TestDataEditor(
         previewEditorState.currentPreview.component.isVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor
     }
 
+    val destructuringAction = object : AnAction("Migrate Destructuring && Copy") {
+        override fun actionPerformed(e: AnActionEvent) {
+            val project = e.project!!
+            project.lifetime.coroutineScope.launch {
+                writeCommandAction(project, "Migrating Destructuring Test") {
+                    for (fileEditor in previewEditorState.previewEditors) {
+                        val file = fileEditor.file
+                        if (file.extension != "kt") continue
+                        val old =
+                            file.copy(this, file.parent, file.nameWithoutAllExtensions + "Old" + file.allExtensions)
+                        old.findDocument()!!.addLanguageDirectives("-")
+                    }
+
+                    migrateThis(project)
+                }
+            }
+        }
+    }
+
+    val destructuringActionWithoutCopy = object : AnAction("Migrate Destructuring") {
+        override fun actionPerformed(e: AnActionEvent) {
+            val project = e.project!!
+            project.lifetime.coroutineScope.launch {
+                writeCommandAction(project, "Migrating Destructuring Test") {
+                    migrateThis(project)
+                }
+            }
+        }
+    }
+
+    fun migrateThis(project: Project) {
+        for (fileEditor in previewEditorState.previewEditors) {
+            val file = fileEditor.file
+            if (file.extension != "kt") continue
+
+            if (file.nameWithoutAllExtensions != file.nameWithoutExtension) {
+                file.delete(project)
+                continue
+            }
+
+            file.migrateFile(project)
+        }
+    }
 
     private fun createTestRunToolbar(): ActionToolbar {
         val generatedTestComboBoxAction = GeneratedTestComboBoxAction(baseEditor)
@@ -144,7 +200,9 @@ class TestDataEditor(
                     generatedTestComboBoxAction.debugAction,
                     generatedTestComboBoxAction.goToAction,
                     generatedTestComboBoxAction.runAllTestsAction,
-                    generatedTestComboBoxAction.moreActionsGroup
+                    generatedTestComboBoxAction.moreActionsGroup,
+                    destructuringAction,
+                    destructuringActionWithoutCopy
                 ),
                 true
             )
@@ -178,7 +236,8 @@ class TestDataEditor(
 
     private val listenersGenerator: ListenersMultimap = ListenersMultimap()
 
-    private inner class DoublingEventListenerDelegate(private val myDelegate: PropertyChangeListener) : PropertyChangeListener {
+    private inner class DoublingEventListenerDelegate(private val myDelegate: PropertyChangeListener) :
+        PropertyChangeListener {
         override fun propertyChange(evt: PropertyChangeEvent) {
             myDelegate.propertyChange(
                 PropertyChangeEvent(this@TestDataEditor, evt.propertyName, evt.oldValue, evt.newValue)
@@ -327,7 +386,11 @@ class TestDataEditor(
     }
 
     override fun getState(level: FileEditorStateLevel): FileEditorState {
-        return MyFileEditorState(editorViewMode, baseEditor.getState(level), previewEditorState.currentPreview.getState(level))
+        return MyFileEditorState(
+            editorViewMode,
+            baseEditor.getState(level),
+            previewEditorState.currentPreview.getState(level)
+        )
     }
 
     override fun isModified(): Boolean {
@@ -356,4 +419,48 @@ class TestDataEditor(
     override fun navigateTo(navigatable: Navigatable) {
         baseEditor.navigateTo(navigatable)
     }
+}
+
+fun VirtualFile.migrateFile(project: Project) {
+    findDocument()!!.run {
+//                if (!text.contains("// FIR_IDENTICAL")) {
+//                    insertString(0, "// FIR_IDENTICAL\n")
+//                }
+        addLanguageDirectives("+")
+        setText(this.text.replace(allMetadataRegex, ""))
+
+        val psiDocumentManager = PsiDocumentManager.getInstance(project)
+        psiDocumentManager.commitDocument(this)
+
+        val ktFile = psiDocumentManager.getPsiFile(this)!! as KtFile
+        ktFile.accept(object : KtVisitorVoid() {
+            override fun visitElement(element: PsiElement) {
+                element.acceptChildren(this)
+            }
+
+            override fun visitDestructuringDeclaration(destructuringDeclaration: KtDestructuringDeclaration) {
+                val psiFactory = KtPsiFactory(project)
+                val expression = psiFactory.createExpression("[1]")
+                destructuringDeclaration.lPar!!.replace(expression.firstChild)
+                destructuringDeclaration.rPar!!.replace(expression.lastChild)
+            }
+        })
+    }
+}
+
+
+private fun Document.addLanguageDirectives(prefix: String) {
+    val lines = text.lines().toMutableList()
+    for (i in lines.indices) {
+        if (lines[i].startsWith("// LANGUAGE:")) {
+            lines[i] += " ${prefix}NameBasedDestructuring ${prefix}DeprecateNameMismatchInShortDestructuringWithParentheses ${prefix}EnableNameBasedDestructuringShortForm"
+            setText(lines.joinToString("\n"))
+            return
+        }
+    }
+
+    insertString(
+        0,
+        "// LANGUAGE: ${prefix}NameBasedDestructuring ${prefix}DeprecateNameMismatchInShortDestructuringWithParentheses ${prefix}EnableNameBasedDestructuringShortForm\n"
+    )
 }

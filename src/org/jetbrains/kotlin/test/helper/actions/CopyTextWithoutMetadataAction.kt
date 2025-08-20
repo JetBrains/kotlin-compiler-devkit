@@ -36,5 +36,5 @@ private val closingDiagnosticRegex = """(<!>)""".toRegex()
 
 private val xmlLikeTagsRegex = """(</?(?:selection|expr|caret)>)""".toRegex()
 
-private val allMetadataRegex =
+val allMetadataRegex =
     """(${closingDiagnosticRegex.pattern}|${openingDiagnosticRegex.pattern}|${xmlLikeTagsRegex.pattern})""".toRegex()
