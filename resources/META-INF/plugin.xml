@@ -35,6 +35,7 @@
           displayType="STICKY_BALLOON"
           key="compiler.devkit.run_apply"/>
 
+        <lang.inspectionSuppressor language="kotlin" implementationClass="org.jetbrains.kotlin.test.helper.inspections.UnusedDeclarationSuppressor"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
