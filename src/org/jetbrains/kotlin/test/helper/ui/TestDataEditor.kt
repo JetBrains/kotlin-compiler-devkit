@@ -79,6 +79,12 @@ class TestDataEditor(
         SplitToolbarPanel(leftToolbar, rightToolbar)
     }
 
+    private val steppingTestDataHighlighter = SteppingTestDataHighlighter(baseEditor)
+
+    init {
+        steppingTestDataHighlighter.register()
+    }
+
     enum class EditorViewMode {
         OnlyBaseEditor,
         BaseAndAdditionalEditor;
