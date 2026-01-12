@@ -90,7 +90,7 @@ intellijPlatform {
                 .map(String::trim)
                 .filter(String::isNotEmpty)
                 .forEach { ideVersion ->
-                    ide(IntelliJPlatformType.IntellijIdeaCommunity, ideVersion)
+                    create(IntelliJPlatformType.IntellijIdeaCommunity, ideVersion)
                 }
         }
         freeArgs = listOf("-mute", "ForbiddenPluginIdPrefix") // The 'org.jetbrains' prefix is normally not allowed
