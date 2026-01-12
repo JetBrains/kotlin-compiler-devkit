@@ -73,7 +73,7 @@ intellijPlatform {
                 throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
             }
             subList(indexOf(start) + 1, indexOf(end)).map {
-                it.replace("](pic/", "](https://raw.githubusercontent.com/demiurg906/test-data-helper-plugin/master/pic/")
+                it.replace("](pic/", "](https://raw.githubusercontent.com/JetBrains/kotlin-compiler-devkit/master/pic/")
             }
         }.joinToString("\n").run { markdownToHTML(this) }
 
