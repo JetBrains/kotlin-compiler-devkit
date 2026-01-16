@@ -8,7 +8,9 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -268,7 +270,7 @@ class TestDataEditor(
     }
 
     private inner class TestDataFileUpdateListener : VirtualFileListener {
-        private val updateAlarm = SingleAlarm(this::updatePreviewList, 500)
+        private val updateAlarm = SingleAlarm(this::updatePreviewList, 500, this@TestDataEditor)
 
         override fun fileCreated(event: VirtualFileEvent) {
             updateAlarm.cancelAndRequest()
