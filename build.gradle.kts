@@ -65,17 +65,23 @@ intellijPlatform {
         changeNotes = provider { changelog.renderItem(changelog.getLatest(), Changelog.OutputType.HTML) }
 
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
-        description = File(projectDir, "README.md").readText().lines().run {
-            val start = "<!-- Plugin description -->"
-            val end = "<!-- Plugin description end -->"
+        description =
+            File(projectDir, "README.md")
+                .readText()
+                .lines()
+                .run {
+                    val start = "<!-- Plugin description -->"
+                    val end = "<!-- Plugin description end -->"
 
-            if (!containsAll(listOf(start, end))) {
-                throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
-            }
-            subList(indexOf(start) + 1, indexOf(end)).map {
-                it.replace("](pic/", "](https://raw.githubusercontent.com/JetBrains/kotlin-compiler-devkit/master/pic/")
-            }
-        }.joinToString("\n").run { markdownToHTML(this) }
+                    if (!containsAll(listOf(start, end))) {
+                        throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
+                    }
+                    subList(indexOf(start) + 1, indexOf(end)).map {
+                        it.replace("](pic/", "](https://raw.githubusercontent.com/JetBrains/kotlin-compiler-devkit/master/pic/")
+                    }
+                }
+                .joinToString("\n")
+                .run { markdownToHTML(this) }
 
         ideaVersion {
             sinceBuild = pluginSinceBuild
@@ -115,6 +121,12 @@ detekt {
     buildUponDefaultConfig = true
 }
 
+// Configure ktlint plugin.
+// Read more: https://pinterest.github.io/ktlint/latest/
+ktlint {
+    version.set("1.8.0")
+}
+
 tasks {
     withType<JavaCompile> {
         sourceCompatibility = "21"
@@ -122,10 +134,12 @@ tasks {
     }
     withType<KotlinCompile> {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
-        compilerOptions.freeCompilerArgs.addAll(listOf(
-            "-opt-in=kotlin.RequiresOptIn",
-            "-Xcontext-parameters"
-        ))
+        compilerOptions.freeCompilerArgs.addAll(
+            listOf(
+                "-opt-in=kotlin.RequiresOptIn",
+                "-Xcontext-parameters",
+            ),
+        )
     }
 
     withType<Detekt> {
