@@ -38,6 +38,7 @@ Use JetBrains MCP `get_run_configurations()` or these pre-configured options:
 - **Run Plugin** - Launches sandbox IDE with plugin installed
 - **Run Tests** - Executes test suite
 - **Run Verifications** - Runs plugin verification
+- **Run Linters** - Runs linters verification
 
 ## Architecture
 
