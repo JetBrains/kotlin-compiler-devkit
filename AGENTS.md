@@ -76,6 +76,11 @@ The plugin registers extensions in `resources/META-INF/plugin.xml`:
 **NEVER use these tools:** `Grep`, `Glob`, `Read`, `Edit`, `Write`, `Task(Explore)`.
 **ALWAYS use JetBrains MCP equivalents instead.**
 
+**Exception:** for paths outside the project (e.g., `~/.claude/`), use standard tools — MCP only works with project-relative paths.
+
+**NEVER use `execute_terminal_command` tool.**
+**ALWAYS use default `Bash` instead.**
+
 Use other similar tools only if it is not possible to use the JetBrains IDE MCP, and you together with the user can't manage to make it work.
 
 ### Why MCP over standard tools?
