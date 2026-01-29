@@ -4,38 +4,20 @@ import com.intellij.ide.actions.runAnything.RunAnythingAction.EXECUTOR_KEY
 import com.intellij.ide.actions.runAnything.RunAnythingUtil
 import com.intellij.ide.actions.runAnything.activity.RunAnythingCommandLineProvider
 import com.intellij.openapi.actionSystem.DataContext
-import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.WindowManager
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.test.helper.actions.TestDescription
+import org.jetbrains.kotlin.test.helper.gradle.computeGradleCommandLine
 import org.jetbrains.plugins.gradle.action.GradleExecuteTaskAction
 import java.awt.Component
-import java.io.File
 import javax.swing.JWindow
 
 private const val COMMAND = "testGlobally"
 private const val TESTS = "--tests"
 private val QUOTES = listOf('\'', '\"')
-
-private val GRADLE_ARGS = listOf(
-    // Proceed to next tasks if some `:test` fails
-    "--continue",
-    // Suppress possible "No tests found for given includes"
-    "-PignoreTestFailures=true",
-    // Native by default (and on TC as well) runs tests in parallel in such a way
-    // that you can't be sure the output of the given test method really belongs
-    // to this specific test.
-    // Because of this, you will see way more failed tests than the actual number
-    // of problematic ones and won't be able to understand what fails and where.
-    "-Pkotlin.internal.native.test.forceStandalone=true",
-)
-private val TEST_TASK_ARGS = listOf(
-    // Avoid `UP_TO_DATE`...
-    "--rerun",
-)
 
 class TestGloballyRunAnythingProvider : RunAnythingCommandLineProvider() {
     /**
@@ -97,126 +79,23 @@ class TestGloballyRunAnythingProvider : RunAnythingCommandLineProvider() {
         val testFiltersFqNames = commandLine.parameters
             .filterIndexed { index, _ -> index.isOdd }
             .map { it.removeQuotesIfNeeded().removeJUnitDisplayNameIfNeeded() }
-        val packagePathsToFilters = testFiltersFqNames.groupBy(::guessPackagePath)
-        val moduleToFilters = mapModulesToRelatedFilters(project, packagePathsToFilters)
 
-        val gradleCommand = GRADLE_ARGS + moduleToFilters.entries.flatMap { (module, filters) ->
-            listOf(module.gradleSubprojectPath + ":test") + TEST_TASK_ARGS + filters.flatMap { listOf(TESTS, "'$it'") }
-        }
+        val javaPsiFacade = JavaPsiFacade.getInstance(project)
+        val globalSearchScope = GlobalSearchScope.allScope(project)
+
+        val methods = testFiltersFqNames
+            .mapNotNull { filter ->
+                val parts = filter.replace("$", ".").split(".")
+                javaPsiFacade.findClass(parts.dropLast(1).joinToString(separator = "."), globalSearchScope)
+                    ?.methods?.find { it.name == parts.last() }
+            }
+            .filter { it.hasAnnotation("org.jetbrains.kotlin.test.TestMetadata") }
+            .map { TestDescription.ExistingTest(it) }
 
         val executor = EXECUTOR_KEY.getData(dataContext)
-        GradleExecuteTaskAction.runGradle(project, executor, workingDirectory, gradleCommand.joinToString(" "))
+        val gradleCommand = computeGradleCommandLine(methods)
+        GradleExecuteTaskAction.runGradle(project, executor, workingDirectory, gradleCommand)
         return true
-    }
-
-    private fun mapModulesToRelatedFilters(
-        project: Project,
-        packagePathsToFilters: Map<String, List<String>>,
-    ): MutableMap<Module, MutableSet<String>> {
-        val packagePrefixes = packagePathsToFilters.keys.flatMapTo(mutableSetOf(), ::getAllPrefixes)
-        val moduleToFilters = mutableMapOf<Module, MutableSet<String>>()
-
-        fun traverseDirectory(directory: VirtualFile, project: Module, pathSoFar: String) {
-            if (packagePrefixes.none { it.startsWith(pathSoFar) }) {
-                return
-            }
-
-            val affectedFilters = packagePathsToFilters.entries
-                .filter { (path, _) -> path == pathSoFar }
-                .flatMap { (_, filters) -> filters }
-
-            if (affectedFilters.isNotEmpty()) {
-                moduleToFilters.getOrPut(project) { mutableSetOf() } += affectedFilters
-            }
-
-            for (it in directory.subdirectories) {
-                traverseDirectory(it, project, "$pathSoFar/" + it.name)
-            }
-        }
-
-        val manager = ModuleManager.getInstance(project)
-        val modules = manager.modules
-
-        modules.forEach { module ->
-            val moduleRootManager = ModuleRootManager.getInstance(module)
-            val testSources = moduleRootManager.sourceRoots
-                .filter { moduleRootManager.fileIndex.isInTestSourceContent(it) }
-
-            for (source in testSources) {
-                traverseDirectory(source, module, pathSoFar = "")
-            }
-        }
-
-        return moduleToFilters
-    }
-
-    /**
-     * Returns `:path:to:module`
-     */
-    private val Module.gradleSubprojectPath: String
-        // In kotlin.git, source roots don't reside in the module directly,
-        // but rather in either the `main` or `test` submodules.
-        // Note that `tests-gen` roots reside in `test` submodules.
-        get() = ":" + nameParts.joinToString(":")
-            .removePrefix("kotlin:")
-            .removeSuffix(":tests")
-            .removeSuffix(":test")
-
-    /**
-     * Returns [`kotlin`, `path`, `to`, `module`]
-     */
-    @Suppress("RecursivePropertyAccessor")
-    private val Module.nameParts: List<String>
-        get() {
-            val allParts = name.split(".").takeIf { it.size >= 2 } ?: return listOf(name)
-            var ownNamePartsCount = 0
-            var parentModule: Module? = null
-
-            while (parentModule == null && ownNamePartsCount < allParts.size) {
-                ownNamePartsCount += 1
-                val parentPrefix = allParts.dropLast(ownNamePartsCount).joinToString(".")
-                val manager = ModuleManager.getInstance(this.project)
-                parentModule = manager.findModuleByName(parentPrefix)
-            }
-
-            val ownNamePart = allParts.takeLast(ownNamePartsCount).joinToString(".")
-            return parentModule?.nameParts.orEmpty() + ownNamePart
-        }
-
-    private val VirtualFile.subdirectories get() = children.filter { it.isDirectory }
-
-    private operator fun File.div(name: String) = File(absolutePath + File.separator + name)
-
-    /**
-     * Tries to get a package name from a filter value.
-     * Assumes that the filter starts with a full package name containing no wildcards.
-     *
-     * Examples:
-     * - `"a.b.C.d"` -> `"/a/b"`
-     * - `"a.b"` -> `"/a/b"`
-     * - `"C.d"` -> ``
-     */
-    private fun guessPackagePath(filter: String): String = filter
-        .split(".")
-        .takeWhile { it.matches("""[a-z]\w*""".toRegex()) }
-        .let { listOf("") + it }
-        .joinToString("/")
-
-    /**
-     * `"/a/b/c"` -> `["/a/b/c", "/a/b", "/a", ""]`
-     */
-    private fun getAllPrefixes(path: String): List<String> {
-        var current = path
-        val prefixes = mutableListOf(current)
-        var lastDot = current.lastIndexOf('/')
-
-        while (lastDot != -1) {
-            current = current.substring(0, lastDot)
-            lastDot = current.lastIndexOf('/')
-            prefixes += current
-        }
-
-        return prefixes
     }
 
     private fun String.removeQuotesIfNeeded(): String {
