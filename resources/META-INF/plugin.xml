@@ -11,6 +11,11 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <fileType name="KotlinTestData" implementationClass="org.jetbrains.kotlin.test.helper.lang.KotlinTestDataFileType"
+                  fieldName="INSTANCE" language="kotlinTestData" extensions="kt"/>
+        <lang.substitutor language="kotlin" implementationClass="org.jetbrains.kotlin.test.helper.lang.KotlinTestDataLanguageSubstitutor"/>
+        <lang.parserDefinition language="kotlinTestData" implementationClass="org.jetbrains.kotlin.test.helper.lang.KotlinTestDataParserDefinition"/>
+
         <fileEditorProvider implementation="org.jetbrains.kotlin.test.helper.KotlinTestDataFileEditorProvider"/>
         <projectConfigurable bundle="messages.MyBundle" instance="org.jetbrains.kotlin.test.helper.TestDataPathsConfigurable"
                              key="pluginSettingsDisplayName"/>
@@ -20,12 +25,14 @@
         <runAnything.executionProvider implementation="org.jetbrains.kotlin.test.helper.runAnything.TestGloballyRunAnythingProvider"
                                        order="first"/>
 
-        <localInspection language="kotlin"
+        <localInspection language="kotlinTestData"
                          groupName="Kotlin"
                          enabledByDefault="true"
                          level="WARNING"
                          implementationClass="org.jetbrains.kotlin.test.helper.inspections.ParameterShouldBeContextParameterInspection"
                          key="inspection.parameter.should.be.context.parameter.display.name"/>
+
+        <highlightingPassFactory implementation="org.jetbrains.kotlin.test.helper.ui.KotlinTestDataHighlightingPassFactory"/>
 
         <postStartupActivity implementation="org.jetbrains.kotlin.test.helper.inspections.OldPluginInstalledWarner"/>
         <notificationGroup id="Kotlin Compiler DevKit Notifications"
@@ -35,18 +42,18 @@
           displayType="STICKY_BALLOON"
           key="compiler.devkit.run_apply"/>
 
-        <lang.inspectionSuppressor language="kotlin" implementationClass="org.jetbrains.kotlin.test.helper.inspections.UnusedDeclarationSuppressor"/>
+        <lang.inspectionSuppressor language="kotlinTestData" implementationClass="org.jetbrains.kotlin.test.helper.inspections.UnusedDeclarationSuppressor"/>
 
         <intentionAction>
-            <language>kotlin</language>
+            <language>KotlinTestData</language>
             <className>org.jetbrains.kotlin.test.helper.intentions.CreateContextualOverloadIntention</className>
             <category>Kotlin Compiler DevKit</category>
         </intentionAction>
 
         <psi.referenceContributor implementation="org.jetbrains.kotlin.test.helper.reference.DirectiveReferenceContributor"
-                                  language="kotlin"/>
+                                  language="kotlinTestData"/>
 
-        <completion.contributor language="kotlin" implementationClass="org.jetbrains.kotlin.test.helper.completion.CommentDirectiveCompletionContributor"/>
+        <completion.contributor language="kotlinTestData" implementationClass="org.jetbrains.kotlin.test.helper.completion.CommentDirectiveCompletionContributor"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
