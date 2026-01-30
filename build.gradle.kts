@@ -23,7 +23,7 @@ plugins {
     // Kotlin support
     id("org.jetbrains.kotlin.jvm") version "2.2.0"
     // gradle-intellij-plugin - read more: https://github.com/JetBrains/gradle-intellij-plugin
-    id("org.jetbrains.intellij.platform") version "2.7.2"
+    id("org.jetbrains.intellij.platform") version "2.11.0"
     // gradle-changelog-plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
     id("org.jetbrains.changelog") version "2.2.1"
     // detekt linter - read more: https://detekt.github.io/detekt/gradle.html
@@ -45,7 +45,7 @@ repositories {
 dependencies {
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.19.0")
     intellijPlatform {
-        create(platformType, platformVersion)
+        intellijIdea("2025.3")
         bundledPlugins(platformPlugins.split(',').map(String::trim).filter(String::isNotEmpty))
         pluginVerifier()
     }
