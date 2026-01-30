@@ -44,19 +44,23 @@ suspend fun generateTestsAndWait(project: Project, files: List<VirtualFile>) {
 
     suspendCancellableCoroutine {
         runTask(
-            TaskExecutionSpec.create(
-                project = project,
-                systemId = GradleConstants.SYSTEM_ID,
-                executorId = getRunExecutorInstance().id,
-                settings = createGradleExternalSystemTaskExecutionSettings(
-                    project, commandLine, useProjectBasePath = true
+            TaskExecutionSpec.create().apply {
+                withProject(project)
+                withSystemId(GradleConstants.SYSTEM_ID)
+                withExecutorId(getRunExecutorInstance().id)
+                withSettings(
+                    createGradleExternalSystemTaskExecutionSettings(
+                        project,
+                        commandLine,
+                        useProjectBasePath = true
+                    )
                 )
-            )
-                .withActivateToolWindowBeforeRun(true)
-                .withCallback(object : TaskCallback {
+                withActivateToolWindowBeforeRun(true)
+                withCallback(object : TaskCallback {
                     override fun onSuccess() = it.resume(Unit)
                     override fun onFailure() = it.resume(Unit)
-                }).build()
+                })
+            }.build()
         )
     }
 

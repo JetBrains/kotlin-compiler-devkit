@@ -60,7 +60,7 @@ class CreateReproducerCommitAction : RunSelectedFilesActionBase() {
                         commitAll(project, ticketNumber)
 
                         withContext(Dispatchers.EDT) {
-                            ActionUtil.performActionDumbAwareWithCallbacks(RefreshAction(), e)
+                            ActionUtil.performAction(RefreshAction(), e)
                         }
                     }
 

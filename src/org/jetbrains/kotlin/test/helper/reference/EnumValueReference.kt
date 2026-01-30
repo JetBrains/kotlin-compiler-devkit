@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.idea.stubindex.KotlinPropertyShortNameIndex
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtDeclarationWithReturnType
 
 const val LANGUAGE_FEATURE_FQ_NAME = "org.jetbrains.kotlin.config.LanguageFeature"
 
@@ -67,6 +68,7 @@ fun getEnumClassesByDirective(key: String, project: Project): List<KtLightClass>
             KotlinPropertyShortNameIndex.Helper[key, project, GlobalSearchScope.allScope(project)]
 
         declarations.mapNotNull {
+            if (it !is KtDeclarationWithReturnType) return@mapNotNull null
             analyze(it) {
                 if (it.returnType.isClassType(VALUE_DIRECTIVE_CLASS_ID)) {
                     ((it.returnType as KaClassType).typeArguments.firstOrNull()?.type?.expandedSymbol?.psi as? KtClass)?.toLightClass()

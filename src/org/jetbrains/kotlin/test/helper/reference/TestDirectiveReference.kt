@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.idea.stubindex.KotlinPropertyShortNameIndex
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.psi.KtDeclarationWithReturnType
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 
 private val DIRECTIVE_CLASS_ID =
@@ -39,8 +40,11 @@ class TestDirectiveReference(
     override fun getVariants(): Array<Any> = emptyArray()
 }
 
-fun KtNamedDeclaration.isDirective(): Boolean = analyze(this) {
-    returnType.isSubtypeOf(DIRECTIVE_CLASS_ID)
+fun KtNamedDeclaration.isDirective(): Boolean {
+    if (this !is KtDeclarationWithReturnType) return false
+    return analyze(this) {
+        returnType.isSubtypeOf(DIRECTIVE_CLASS_ID)
+    }
 }
 
 fun <T : PsiElement> resolvePreferringProjectScope(project: Project, resolve: (GlobalSearchScope) -> List<T>): List<T> {
