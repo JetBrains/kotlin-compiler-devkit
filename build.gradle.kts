@@ -9,8 +9,6 @@ val pluginGroup: String by extra
 val pluginVersion: String by extra
 val pluginName: String by extra
 val pluginId: String by extra
-val platformType: String by extra
-val platformVersion: String by extra
 val platformPlugins: String by extra
 val pluginSinceBuild: String by extra
 val pluginUntilBuild: String by extra
