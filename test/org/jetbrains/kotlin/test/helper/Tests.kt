@@ -1,4 +1,5 @@
-import org.jetbrains.kotlin.test.helper.asPathWithoutAllExtensions
+package org.jetbrains.kotlin.test.helper
+
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
