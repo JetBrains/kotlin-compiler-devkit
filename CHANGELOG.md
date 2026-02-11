@@ -2,6 +2,9 @@
 
 # Changelog
 
+## 1.0.66
+- Add actions to run `manageTestDataGlobally` for selected files.
+
 ## 0.0.19
 - Fixed an issue when "Available files" combo box didn't update until the editor was closed and reopened again.
 

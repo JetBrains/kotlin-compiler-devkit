@@ -124,6 +124,46 @@
             </action>
         </group>
 
+        <group id="TestDataManagerGroup"
+               class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerGroup"
+               text="Manage Test Data" icon="AllIcons.Nodes.Folder" popup="true">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="Vcs.Log.ChangesBrowser.Popup" anchor="last"/>
+            <add-to-group group-id="NavbarPopupMenu" anchor="last"/>
+            <add-to-group group-id="UsageView.Popup" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenuEx" anchor="last"/>
+
+            <action
+                    id="TestDataManagerUpdateAllTests"
+                    class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateAction"
+                    text="Update Test Data"
+                    description="Runs :manageTestDataGlobally with update mode for selected files"
+                    icon="AllIcons.Diff.ApplyNotConflicts">
+            </action>
+            <action
+                    id="TestDataManagerUpdateGoldenTests"
+                    class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateGoldenAction"
+                    text="Update Test Data (Golden Only)"
+                    description="Runs :manageTestDataGlobally with update mode for selected golden files"
+                    icon="AllIcons.Diff.ApplyNotConflicts">
+            </action>
+            <action
+                    id="TestDataManagerCheckAllTests"
+                    class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerCheckAction"
+                    text="Check Test Data"
+                    description="Runs :manageTestDataGlobally with check mode for selected files"
+                    icon="AllIcons.Actions.RunAll">
+            </action>
+            <action
+                    id="TestDataManagerCheckGoldenTests"
+                    class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerCheckGoldenAction"
+                    text="Check Test Data (Golden Only)"
+                    description="Runs :manageTestDataGlobally with check mode for selected golden files"
+                    icon="AllIcons.Actions.RunAll">
+            </action>
+        </group>
+
         <action id="RunAllChangesTests" class="org.jetbrains.kotlin.test.helper.actions.RunAllChangedTestsAction"
                 text="Run All Changed Tests"
                 description="Run all tests related to changed test data files"

@@ -1,10 +1,6 @@
 package org.jetbrains.kotlin.test.helper.actions
 
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.components.service
 import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.gradle.isGradleEnabled
@@ -34,11 +30,15 @@ abstract class RunSelectedFilesActionBase : AnAction() {
     abstract val isDebug: Boolean
 }
 
+val AnActionEvent.hasSelectedTestDataFiles: Boolean
+    get() {
+        val project = project ?: return false
+        val selectedFiles = getData(CommonDataKeys.VIRTUAL_FILE_ARRAY) ?: emptyArray()
+        return selectedFiles.any { it.getTestDataType(project) != null } && project.isGradleEnabled()
+    }
+
 private fun AnActionEvent.updateRunSelectedPresentation() {
-    val project = this.project ?: return
-    val selectedFiles = getData(CommonDataKeys.VIRTUAL_FILE_ARRAY) ?: emptyArray()
-    presentation.isEnabledAndVisible =
-        selectedFiles.any { it.getTestDataType(project) != null } && project.isGradleEnabled()
+    presentation.isEnabledAndVisible = hasSelectedTestDataFiles
 }
 
 abstract class AbstractRunSelectedFilesTestsAction : RunSelectedFilesActionBase() {
@@ -65,10 +65,10 @@ abstract class AbstractRunSelectedFilesSpecificTestsAction : RunSelectedFilesAct
     }
 }
 
-class RunSelectedFilesSpecificTestsAction: AbstractRunSelectedFilesSpecificTestsAction() {
+class RunSelectedFilesSpecificTestsAction : AbstractRunSelectedFilesSpecificTestsAction() {
     override val isDebug: Boolean get() = false
 }
 
-class DebugSelectedFilesSpecificTestsAction: AbstractRunSelectedFilesSpecificTestsAction() {
+class DebugSelectedFilesSpecificTestsAction : AbstractRunSelectedFilesSpecificTestsAction() {
     override val isDebug: Boolean get() = true
 }
