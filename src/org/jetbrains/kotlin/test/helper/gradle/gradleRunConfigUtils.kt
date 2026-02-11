@@ -26,6 +26,10 @@ class GradleRunConfig(
 
 fun runGradleCommandLine(e: AnActionEvent, config: GradleRunConfig) {
     val project = e.project ?: return
+    return runGradleCommandLine(project, config)
+}
+
+fun runGradleCommandLine(project: Project, config: GradleRunConfig) {
     val runSettings = createGradleRunAndConfigurationSettings(project,config) ?: return
     ProgramRunnerUtil.executeConfiguration(
         runSettings,

@@ -18,6 +18,12 @@ import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.nio.file.Paths
 import kotlin.coroutines.resume
 
+fun Project.hasGradleTask(taskName: String): Boolean {
+    val projectPath = basePath ?: return false
+    val tasks = ExternalSystemApiUtil.findProjectTasks(this, GradleConstants.SYSTEM_ID, projectPath)
+    return tasks.any { it.name == taskName }
+}
+
 /**
  * True when Gradle is available but not necessarily used as test runner.
  *
