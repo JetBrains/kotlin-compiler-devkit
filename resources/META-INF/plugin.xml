@@ -149,6 +149,13 @@
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action
+                    id="TestDataManagerUpdateIncrementalAction"
+                    class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateIncrementalAction"
+                    text="Update Test Data (Incremental)"
+                    description="Runs :manageTestDataGlobally with update mode for selected files. Runs alternative tests only if the golden one had changes"
+                    icon="AllIcons.Diff.ApplyNotConflicts">
+            </action>
+            <action
                     id="TestDataManagerCheckAllTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerCheckAction"
                     text="Check Test Data"

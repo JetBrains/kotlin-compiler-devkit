@@ -15,6 +15,7 @@ class TestDataManagerCommandBuilder {
     var testDataPaths: List<String> = emptyList()
     var testClassPattern: String? = null
     var goldenOnly: Boolean? = null
+    var incremental: Boolean? = false
 
     fun build(): String = buildString {
         append("manageTestDataGlobally")
@@ -25,6 +26,7 @@ class TestDataManagerCommandBuilder {
 
         testClassPattern?.let { append(" --test-class-pattern=$it") }
         goldenOnly?.let { if (it) append(" --golden-only") }
+        incremental?.let { if (it) append(" --incremental") }
         append(" --continue")
     }
 
@@ -34,10 +36,16 @@ class TestDataManagerCommandBuilder {
             TestDataManagerMode.UPDATE -> append("Update")
             null -> append("Manage")
         }
+
         append(" Test Data")
         if (goldenOnly == true) {
             append(" (Golden Only)")
         }
+
+        if (incremental == true) {
+            append(" (Incremental)")
+        }
+
         if (testDataPaths.isNotEmpty()) {
             append(": ")
             append(testDataPaths.joinToString { it.substringAfterLast('/') })
