@@ -108,6 +108,17 @@ class TestDataManagerUpdateGoldenAction : TestDataManagerActionWithTestDataBase(
     }
 }
 
+class TestDataManagerUpdateIncrementalAction : TestDataManagerActionWithTestDataBase() {
+    override val isDebug: Boolean get() = false
+
+    override fun configureTestDataManagerBuilder(builder: TestDataManagerCommandBuilder) {
+        with(builder) {
+            mode = TestDataManagerMode.UPDATE
+            incremental = true
+        }
+    }
+}
+
 class TestDataManagerCheckAction : TestDataManagerActionWithTestDataBase() {
     override val isDebug: Boolean get() = false
 

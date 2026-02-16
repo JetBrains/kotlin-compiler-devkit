@@ -183,6 +183,18 @@ class TestDataManagerCommandBuilderTest {
     }
 
     @Test
+    fun `UPDATE mode with incremental`() {
+        assertBuilder(
+            expectedCommand = "manageTestDataGlobally --mode=update --test-data-path=a/b.txt --incremental --continue",
+            expectedTitle = "Update Test Data (Incremental): b.txt",
+        ) {
+            mode = TestDataManagerMode.UPDATE
+            incremental = true
+            testDataPaths = listOf("a/b.txt")
+        }
+    }
+
+    @Test
     fun `all parameters`() {
         assertBuilder(
             expectedCommand =

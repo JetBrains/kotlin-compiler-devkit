@@ -2,6 +2,9 @@
 
 # Changelog
 
+## 1.0.67
+- Support `--incremental` flag in `manageTestDataGlobally` command via new `Update Test Data (Incremental)` action.
+
 ## 1.0.66
 - Add actions to run `manageTestDataGlobally` for selected files.
 
