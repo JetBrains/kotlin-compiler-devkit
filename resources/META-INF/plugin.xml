@@ -211,7 +211,12 @@
                 class="org.jetbrains.kotlin.test.helper.actions.RemoveLatestLvDifference"
                 text="Remove LATEST__LV__DIFFERENCE"
                 description="Adds the LATEST_LV_DIFFERENCE directive">
-            <add-to-group group-id="TestTreePopupMenu" anchor="last" />
+            <add-to-group group-id="TestTreePopupMenu" anchor="last"/>
         </action>
     </actions>
+
+    <applicationListeners>
+        <listener class="org.jetbrains.kotlin.test.helper.listeners.RelatedFileRenameListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </applicationListeners>
 </idea-plugin>
