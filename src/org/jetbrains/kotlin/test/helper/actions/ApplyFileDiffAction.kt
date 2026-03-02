@@ -66,7 +66,7 @@ suspend fun runTestAndApplyDiffLoop(
         val result = applyDiffs(arrayOf(testProxy), project)
 
         if (result != ApplyDiffResult.SUCCESS) {
-            suspendCancellableCoroutine {
+            val shouldContinue = suspendCancellableCoroutine {
                 val notification = NotificationGroupManager.getInstance()
                     .getNotificationGroup("Kotlin Compiler DevKit Run Apply")
                     .createNotification(
@@ -81,7 +81,14 @@ suspend fun runTestAndApplyDiffLoop(
 
                 notification.addAction(object : AnAction("Continue") {
                     override fun actionPerformed(p0: AnActionEvent) {
-                        it.resume(Unit)
+                        it.resume(true)
+                        notification.expire()
+                    }
+                })
+
+                notification.addAction(object : AnAction("Cancel") {
+                    override fun actionPerformed(p0: AnActionEvent) {
+                        it.resume(false)
                         notification.expire()
                     }
                 })
@@ -90,6 +97,8 @@ suspend fun runTestAndApplyDiffLoop(
 
                 it.invokeOnCancellation { notification.expire() }
             }
+
+            if (!shouldContinue) break
         }
     }
 }
