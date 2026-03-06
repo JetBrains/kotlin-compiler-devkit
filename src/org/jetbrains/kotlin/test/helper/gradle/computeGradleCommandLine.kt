@@ -60,8 +60,10 @@ private fun toTaskArguments(
             append(taskArguments)
 
             val missingPart = sequence {
-                yield(".test" + current.normalizedName())
-                current = current.parent
+                if (!description.file.isDirectory) {
+                    yield(".test" + current.normalizedName())
+                    current = current.parent
+                }
 
                 while (current != parent) {
                     yield("$" + current.normalizedName())
