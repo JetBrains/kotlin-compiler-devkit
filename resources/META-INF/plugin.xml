@@ -47,6 +47,9 @@
                                   language="kotlin"/>
 
         <completion.contributor language="kotlin" implementationClass="org.jetbrains.kotlin.test.helper.completion.CommentDirectiveCompletionContributor"/>
+
+        <executor implementation="org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsExecutor"/>
+        <programRunner implementation="org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsProgramRunner"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
