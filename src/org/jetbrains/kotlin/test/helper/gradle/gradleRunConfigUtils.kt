@@ -38,11 +38,12 @@ fun runGradleCommandLine(project: Project, config: GradleRunConfig) {
 
     val runManager = RunManager.getInstance(project)
     val existingConfiguration = runManager.findConfigurationByTypeAndName(runSettings.type, runSettings.name)
-    if (existingConfiguration == null) {
-        runManager.setTemporaryConfiguration(runSettings)
-    } else {
-        runManager.selectedConfiguration = existingConfiguration
+
+    if (existingConfiguration != null && existingConfiguration.isTemporary) {
+        runManager.removeConfiguration(existingConfiguration)
     }
+
+    runManager.setTemporaryConfiguration(runSettings)
 }
 
 private fun createGradleRunAndConfigurationSettings(project: Project, config: GradleRunConfig): RunnerAndConfigurationSettings? {
