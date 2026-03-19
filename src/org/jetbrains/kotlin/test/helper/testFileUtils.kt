@@ -63,11 +63,15 @@ val String.asPathWithoutAllExtensions: String
             dotIndex = lastIndexOf('.', dotPreviousIndex - 1)
         } while (
             dotIndex > separatorLastIndex && // it also handles `-1`
-            !subSequence(dotIndex + 1, dotPreviousIndex).let { it.isNotEmpty() && it.all { c -> c.isDigit() } }
+            !substring(dotIndex + 1, dotPreviousIndex).let { it.isNotEmpty() && it.isExcludedExtension() }
         )
 
         return substring(0, dotPreviousIndex)
     }
+
+private fun String.isExcludedExtension(): Boolean {
+    return all { c -> c.isDigit() } || this == "repl"
+}
 
 val String.allExtensions: String
     get() = substring(asPathWithoutAllExtensions.length)
