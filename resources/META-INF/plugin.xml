@@ -73,7 +73,7 @@
             <action id="TestDataRunAllTestsSpecific"
                     class="org.jetbrains.kotlin.test.helper.actions.RunSelectedFilesSpecificTestsAction"
                     text="Run Specific Tests" description="Run specific tests related to selected files"
-                    icon="AllIcons.RunConfigurations.TestState.Run">
+                    icon="AllIcons.Actions.Execute">
             </action>
             <action id="TestDataDebugAllTestsSpecific"
                     class="org.jetbrains.kotlin.test.helper.actions.DebugSelectedFilesSpecificTestsAction"
@@ -104,7 +104,7 @@
             <action id="TestDataRunAllTests"
                     class="org.jetbrains.kotlin.test.helper.actions.RunSelectedFilesTestsAction"
                     text="Run All Tests" description="Run all tests related to selected files"
-                    icon="AllIcons.RunConfigurations.TestState.Run">
+                    icon="AllIcons.Actions.Execute">
             </action>
             <action id="TestDataDebugAllTests"
                     class="org.jetbrains.kotlin.test.helper.actions.DebugSelectedFilesTestsAction"
