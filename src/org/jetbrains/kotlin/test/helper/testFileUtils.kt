@@ -94,12 +94,22 @@ fun List<VirtualFile>.toFileNamesString(project: Project): String {
 }
 
 
-fun VirtualFile.getRelatedTestFiles(
-    project: Project
-): List<VirtualFile> {
+fun VirtualFile.getRelatedTestFiles(project: Project): List<VirtualFile> {
     val configuration = TestDataPathsConfiguration.getInstance(project)
     val curFileName = simpleNameUntilFirstDot
 
     return this.parent.children.filter { it.name.startsWith("$curFileName.") } +
             configuration.findAdditionalRelatedFiles(this, curFileName)
+}
+
+fun VirtualFile.mainTestFileOrNull(project: Project): VirtualFile? {
+    return when (getTestDataType(project)) {
+        TestDataType.File,
+        TestDataType.Directory,
+        TestDataType.DirectoryOfFiles -> this
+
+        TestDataType.RelatedFile -> supportedExtensions.firstNotNullOfOrNull { parent.findChild("$nameWithoutAllExtensions.$it") }
+
+        null -> null
+    }
 }

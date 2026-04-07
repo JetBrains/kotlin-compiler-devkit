@@ -7,10 +7,10 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.test.helper.actions.RunSelectedFilesActionBase
 import org.jetbrains.kotlin.test.helper.actions.hasSelectedTestDataFiles
-import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.gradle.GradleRunConfig
 import org.jetbrains.kotlin.test.helper.gradle.hasGradleTask
 import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLine
+import org.jetbrains.kotlin.test.helper.mainTestFileOrNull
 
 class TestDataManagerGroup : DefaultActionGroup() {
     override fun update(e: AnActionEvent) {
@@ -59,7 +59,7 @@ val AnActionEvent.testDataPaths: List<String>
         val files = getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)?.asList() ?: return emptyList()
 
         return files
-            .filter { it.getTestDataType(project) != null }
+            .mapNotNull { it.mainTestFileOrNull(project) }
             .map { it.path.removePrefix(basePath).removePrefix("/") }
             .distinct()
     }
