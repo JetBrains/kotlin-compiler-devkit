@@ -5,12 +5,14 @@ import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import org.jetbrains.kotlin.test.helper.actions.CancellationCallback
 import org.jetbrains.plugins.gradle.service.execution.GradleRunConfiguration
 import org.jetbrains.plugins.gradle.settings.GradleLocalSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
@@ -24,13 +26,34 @@ class GradleRunConfig(
     val debug: Boolean,
 )
 
-fun runGradleCommandLine(e: AnActionEvent, config: GradleRunConfig) {
-    val project = e.project ?: return
+fun runGradleCommandLineCancellable(e: AnActionEvent, config: GradleRunConfig): CancellationCallback {
+    val project = e.project ?: return {}
+    val runnerAndConfigurationSettings = runGradleCommandLine(project, config) ?: return {}
+
+    return runnerAndConfigurationSettings.createCancellationCallback(project)
+}
+
+fun RunnerAndConfigurationSettings.createCancellationCallback(project: Project): CancellationCallback {
+    return {
+        RunContentManager.getInstance(project).allDescriptors.forEach { descriptor ->
+            @Suppress("UnstableApiUsage")
+            if (descriptor.runConfigurationName == this.name) {
+                val handler = descriptor.processHandler
+                if (handler != null && !handler.isProcessTerminated) {
+                    handler.destroyProcess()
+                }
+            }
+        }
+    }
+}
+
+fun runGradleCommandLine(e: AnActionEvent, config: GradleRunConfig): RunnerAndConfigurationSettings? {
+    val project = e.project ?: return null
     return runGradleCommandLine(project, config)
 }
 
-fun runGradleCommandLine(project: Project, config: GradleRunConfig) {
-    val runSettings = createGradleRunAndConfigurationSettings(project,config) ?: return
+fun runGradleCommandLine(project: Project, config: GradleRunConfig): RunnerAndConfigurationSettings? {
+    val runSettings = createGradleRunAndConfigurationSettings(project,config) ?: return null
     ProgramRunnerUtil.executeConfiguration(
         runSettings,
         if (config.debug) DefaultDebugExecutor.getDebugExecutorInstance() else DefaultRunExecutor.getRunExecutorInstance()
@@ -44,6 +67,8 @@ fun runGradleCommandLine(project: Project, config: GradleRunConfig) {
     }
 
     runManager.setTemporaryConfiguration(runSettings)
+
+    return runSettings
 }
 
 private fun createGradleRunAndConfigurationSettings(project: Project, config: GradleRunConfig): RunnerAndConfigurationSettings? {

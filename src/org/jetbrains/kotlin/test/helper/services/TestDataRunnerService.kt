@@ -19,12 +19,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
+import org.jetbrains.kotlin.test.helper.actions.CancellationCallback
 import org.jetbrains.kotlin.test.helper.actions.TestDescription
 import org.jetbrains.kotlin.test.helper.actions.filterAndCollectTestDescriptions
 import org.jetbrains.kotlin.test.helper.buildRunnerLabel
 import org.jetbrains.kotlin.test.helper.gradle.GradleRunConfig
 import org.jetbrains.kotlin.test.helper.gradle.computeGradleCommandLine
 import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLine
+import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLineCancellable
 import org.jetbrains.kotlin.test.helper.isHeavyTest
 import org.jetbrains.kotlin.test.helper.toFileNamesString
 import javax.swing.ListSelectionModel
@@ -53,7 +55,7 @@ class TestDataRunnerService(
         files: List<VirtualFile>,
         debug: Boolean,
         filterByClass: String? = null
-    ) {
+    ): CancellationCallback? {
         val commandLine = withBackgroundProgress(project, title = "Running all tests") {
             reportSequentialProgress { reporter ->
                 reporter.indeterminateStep("Collecting tests")
@@ -72,7 +74,7 @@ class TestDataRunnerService(
                     computeGradleCommandLine(filtered)
                 }
             }
-        } ?: return
+        } ?: return null
 
         val fileNamesString = files.toFileNamesString(project)
 
@@ -83,7 +85,7 @@ class TestDataRunnerService(
             useProjectBasePath = false,
             runAsTest = true
         )
-        runGradleCommandLine(e, config)
+        return runGradleCommandLineCancellable(e, config)
     }
 
     fun collectAndRunSpecificTests(e: AnActionEvent, files: List<VirtualFile>?, debug: Boolean) {

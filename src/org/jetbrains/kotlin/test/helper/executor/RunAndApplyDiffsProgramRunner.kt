@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.actions.runTestAndApplyDiffLoop
+import org.jetbrains.kotlin.test.helper.gradle.createCancellationCallback
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 
 class RunAndApplyDiffsProgramRunner : ProgramRunner<Nothing> {
@@ -37,6 +38,7 @@ class RunAndApplyDiffsProgramRunner : ProgramRunner<Nothing> {
                         withContext(Dispatchers.EDT) {
                             ProgramRunnerUtil.executeConfiguration(runnerAndSettings, defaultExecutor)
                         }
+                        runnerAndSettings.createCancellationCallback(project)
                     }
                 }
             }

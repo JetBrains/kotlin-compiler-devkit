@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.gradle.GradleRunConfig
 import org.jetbrains.kotlin.test.helper.gradle.computeGradleCommandLine
-import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLine
+import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLineCancellable
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 import org.jetbrains.kotlin.test.helper.toFileNamesString
 
@@ -42,7 +42,8 @@ class RunSelectedAndApplyDiffsAction : GradleOnlyAction(), DumbAware {
                                 useProjectBasePath = false,
                                 runAsTest = true,
                             )
-                            runGradleCommandLine(e, config)
+
+                            runGradleCommandLineCancellable(e, config)
                         }
                     }
                 }

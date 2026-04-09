@@ -52,15 +52,17 @@ internal class ApplyFileDiffAction : DumbAwareAction() {
     }
 }
 
+typealias CancellationCallback = () -> Unit
+
 context(scope: CoroutineScope)
 suspend fun runTestAndApplyDiffLoop(
     project: Project,
-    runTests: suspend () -> Unit,
+    runTests: suspend () -> CancellationCallback?,
 ) {
     while (true) {
-        runTests()
+        val cb = runTests()
 
-        val testProxy = awaitTestRun(project)
+        val testProxy = awaitTestRun(project, cb)
         if (testProxy.isPassed || testProxy.isIgnored) break
 
         val result = applyDiffs(arrayOf(testProxy), project)
@@ -104,7 +106,7 @@ suspend fun runTestAndApplyDiffLoop(
 }
 
 context(scope: CoroutineScope)
-private suspend fun awaitTestRun(project: Project): SMTestProxy.SMRootTestProxy {
+private suspend fun awaitTestRun(project: Project, onCancel: CancellationCallback?): SMTestProxy.SMRootTestProxy {
     return suspendCancellableCoroutine {
         val connection = project.messageBus.connect(scope)
         connection
@@ -115,7 +117,10 @@ private suspend fun awaitTestRun(project: Project): SMTestProxy.SMRootTestProxy 
                 }
             })
 
-        it.invokeOnCancellation { connection.disconnect() }
+        it.invokeOnCancellation {
+            connection.disconnect()
+            onCancel?.invoke()
+        }
     }
 }
 
