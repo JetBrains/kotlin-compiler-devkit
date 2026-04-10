@@ -52,7 +52,7 @@ fun VirtualFile.collectTestDescriptions(
     val existing = collectTestMethodsIfTestData(project)
         .mapTo(mutableListOf<TestDescription>()) { TestDescription.ExistingTest(it) }
 
-    if (existing.none { (it.psi as PsiClass).parent is PsiFile }) {
+    if (existing.none { (it.psi as? PsiClass)?.parent is PsiFile }) {
         parentsWithSelf
             .drop(1)
             .takeWhile { it.getTestDataType(project) != null }
