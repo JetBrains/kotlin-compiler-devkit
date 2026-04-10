@@ -77,22 +77,21 @@ private fun VirtualFile.collectTestMethodsIfTestData(project: Project, fallbackT
     val cache = PsiShortNamesCache.getInstance(project)
 
     return if (testDataType == TestDataType.DirectoryOfFiles) {
-        val classes = cache.getClassesByName(normalizedName, GlobalSearchScope.allScope(project))
-            .toList()
-            .ifEmpty {
-                if (fallbackToFirstChild && normalizedFile.isDirectory) {
-                    @Suppress("UnsafeVfsRecursion")
-                    normalizedFile.children.firstOrNull()
-                        ?.collectTestMethodsIfTestData(project, fallbackToFirstChild = false)
-                        ?.mapNotNull { it.parent as? PsiClass }
-                        ?.let { return@ifEmpty it }
-                }
-
-                emptyList()
-            }
+        val classes = cache.getClassesByName(normalizedName, GlobalSearchScope.allScope(project)).toList()
         classes.filter {
             val (testMetaData, testDataPath) = it.extractClassTestMetadata(project)
             buildPath(null, testMetaData, testDataPath, project) == truePathWithoutAllExtensions
+        }.ifEmpty {
+            if (fallbackToFirstChild && normalizedFile.isDirectory) {
+                @Suppress("UnsafeVfsRecursion")
+                normalizedFile.children
+                    .take(10)
+                    .firstNotNullOfOrNull { it.collectTestMethodsIfTestData(project, fallbackToFirstChild = false).ifEmpty { null } }
+                    ?.mapNotNull { it.parent as? PsiClass }
+                    .orEmpty()
+            } else {
+                emptyList()
+            }
         }
     } else {
         val methods = cache.getMethodsByName("test$normalizedName", GlobalSearchScope.allScope(project))
