@@ -5,6 +5,7 @@ import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.isFile
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiModifierListOwner
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.search.GlobalSearchScope
@@ -51,18 +52,20 @@ fun VirtualFile.collectTestDescriptions(
     val existing = collectTestMethodsIfTestData(project)
         .mapTo(mutableListOf<TestDescription>()) { TestDescription.ExistingTest(it) }
 
-    parentsWithSelf
-        .drop(1)
-        .takeWhile { it.getTestDataType(project) != null }
-        .firstNotNullOfOrNull { parent ->
-            parent.collectTestMethodsIfTestData(project)
-                .mapNotNull {
-                    val klass = it as? PsiClass ?: return@mapNotNull null
-                    TestDescription.GeneratedOnTheFly(klass, this, parent)
-                }
-                .ifEmpty { null }
-        }
-        ?.let { existing.addAll(it) }
+    if (existing.none { (it.psi as PsiClass).parent is PsiFile }) {
+        parentsWithSelf
+            .drop(1)
+            .takeWhile { it.getTestDataType(project) != null }
+            .firstNotNullOfOrNull { parent ->
+                parent.collectTestMethodsIfTestData(project)
+                    .mapNotNull {
+                        val klass = it as? PsiClass ?: return@mapNotNull null
+                        TestDescription.GeneratedOnTheFly(klass, this, parent)
+                    }
+                    .ifEmpty { null }
+            }
+            ?.let { existing.addAll(it) }
+    }
 
     return existing.distinctBy { it.psi.containingFile }
 }
