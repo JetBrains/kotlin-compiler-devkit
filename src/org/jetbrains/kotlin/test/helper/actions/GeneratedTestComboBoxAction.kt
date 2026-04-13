@@ -69,6 +69,19 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
     override fun update(item: String?, presentation: Presentation, popup: Boolean) {
         presentation.text = item
+
+        if (item != null) {
+            val index = state.methodsClassNames.indexOf(item)
+            val actions = state.debugAndRunActionLists.elementAtOrNull(index) ?: return
+            presentation.putClientProperty(ActionUtil.INLINE_ACTIONS, buildList {
+                addAll(actions)
+                add(object : AnAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts) {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        runAndApply(e, item)
+                    }
+                })
+            })
+        }
     }
 
     override fun selectionChanged(item: String?): Boolean {
@@ -141,8 +154,14 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                 }
                 val topLevelClass = testMethod.parentsOfType<PsiClass>().last()
 
-                val group= allActions.take(2).map {
-                    DelegatingRunDebugAction(it, identifier, topLevelClass)
+                val group = allActions.take(2).mapIndexed { index, action ->
+                    DelegatingRunDebugAction(
+                        action,
+                        identifier,
+                        topLevelClass,
+                        if (index == 0) "Run" else "Debug",
+                        if (index == 0) AllIcons.Actions.Execute else AllIcons.Actions.StartDebugger
+                    )
                 }
 
                 val runnerLabel = topLevelClass.buildRunnerLabel(testTags)
@@ -186,6 +205,27 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         fun onSelectionUpdated() {
             val runnerName = methodsClassNames.elementAtOrNull(currentChosenGroup) ?: return
             LastUsedTestService.getInstance(project).updateChosenRunner(topLevelDirectory, runnerName)
+        }
+    }
+
+    private fun runAndApply(e: AnActionEvent, className: String) {
+        val project = e.project ?: return
+        val service = project.service<TestDataRunnerService>()
+        service.scope.launch {
+            withBackgroundProgress(project, "Running Selected & Applying Diffs") {
+                reportSequentialProgress { reporter ->
+                    reporter.indeterminateStep("Running Selected")
+
+                    runTestAndApplyDiffLoop(project) {
+                        service.doCollectAndRunAllTests(
+                            e,
+                            listOf(baseEditor.file),
+                            debug = false,
+                            filterByClass = className
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -261,25 +301,8 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
             },
             object : GradleOnlyAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts), DumbAware {
                 override fun actionPerformed(e: AnActionEvent) {
-                    val project = e.project ?: return
-                    val service = project.service<TestDataRunnerService>()
-                    service.scope.launch {
-                        withBackgroundProgress(project, "Running Selected & Applying Diffs") {
-                            reportSequentialProgress { reporter ->
-                                reporter.indeterminateStep("Running Selected")
-                                val className = state.methodsClassNames.elementAtOrNull(state.currentChosenGroup) ?: return@reportSequentialProgress
-
-                                runTestAndApplyDiffLoop(project) {
-                                    service.doCollectAndRunAllTests(
-                                        e,
-                                        listOf(baseEditor.file),
-                                        debug = false,
-                                        filterByClass = className
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    val className = state.methodsClassNames.elementAtOrNull(state.currentChosenGroup) ?: return
+                    runAndApply(e, className)
                 }
             },
             object : GradleOnlyAction("Run All && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts), DumbAware {
@@ -325,8 +348,10 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 class DelegatingRunDebugAction(
     private val action: AnAction,
     private val identifier: PsiElement,
-    private val topLevelClass: PsiClass
-) : AnAction(), DumbAware {
+    private val topLevelClass: PsiClass,
+    text: String,
+    icon: Icon,
+) : AnAction(text, text, icon), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val dataContext = SimpleDataContext.builder().apply {
             val newLocation = PsiLocation.fromPsiElement(identifier)
