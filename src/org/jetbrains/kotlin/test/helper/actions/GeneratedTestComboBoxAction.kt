@@ -72,15 +72,22 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
         if (item != null) {
             val index = state.methodsClassNames.indexOf(item)
-            val actions = state.debugAndRunActionLists.elementAtOrNull(index) ?: return
-            presentation.putClientProperty(ActionUtil.INLINE_ACTIONS, buildList {
-                addAll(actions)
-                add(object : AnAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts) {
-                    override fun actionPerformed(e: AnActionEvent) {
-                        runAndApply(e, item)
+            presentation.putClientProperty(
+                ActionUtil.INLINE_ACTIONS,
+                listOf(
+                    object : AnAction("Run", null, AllIcons.Actions.Execute) {
+                        override fun actionPerformed(e: AnActionEvent) =
+                            state.executeRunConfigAction(e, index, debug = false)
+                    },
+                    object : AnAction("Debug", null, AllIcons.Actions.StartDebugger) {
+                        override fun actionPerformed(e: AnActionEvent) =
+                            state.executeRunConfigAction(e, index, debug = true)
+                    },
+                    object : AnAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts) {
+                        override fun actionPerformed(e: AnActionEvent) = runAndApply(e, item)
                     }
-                })
-            })
+                )
+            )
         }
     }
 
@@ -154,14 +161,8 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                 }
                 val topLevelClass = testMethod.parentsOfType<PsiClass>().last()
 
-                val group = allActions.take(2).mapIndexed { index, action ->
-                    DelegatingRunDebugAction(
-                        action,
-                        identifier,
-                        topLevelClass,
-                        if (index == 0) "Run" else "Debug",
-                        if (index == 0) AllIcons.Actions.Execute else AllIcons.Actions.StartDebugger
-                    )
+                val group = allActions.take(2).map {
+                    DelegatingRunDebugAction(it, identifier, topLevelClass)
                 }
 
                 val runnerLabel = topLevelClass.buildRunnerLabel(testTags)
@@ -175,14 +176,14 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
             )
         }
 
-        internal fun executeRunConfigAction(e: AnActionEvent, index: Int) {
+        internal fun executeRunConfigAction(e: AnActionEvent, runnerIndex: Int, debug: Boolean) {
             if (project.hasGradleTestRunner(baseEditor.file)) {
-                val className = methodsClassNames.elementAtOrNull(currentChosenGroup) ?: return
+                val className = methodsClassNames.elementAtOrNull(runnerIndex) ?: return
                 project.service<TestDataRunnerService>()
-                    .collectAndRunAllTests(e, listOf(baseEditor.file), debug = index == 1, filterByClass = className)
+                    .collectAndRunAllTests(e, listOf(baseEditor.file), debug = debug, filterByClass = className)
             } else {
                 val action =
-                    debugAndRunActionLists.elementAtOrNull(currentChosenGroup)?.elementAtOrNull(index) ?: return
+                    debugAndRunActionLists.elementAtOrNull(runnerIndex)?.elementAtOrNull(if (debug) 1 else 0) ?: return
                 ActionUtil.performAction(action, e)
             }
         }
@@ -231,7 +232,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
     inner class RunAction(private val index: Int, text: String, icon: Icon) : AnAction(text, text, icon), DumbAware {
         override fun actionPerformed(e: AnActionEvent) {
-            state.executeRunConfigAction(e, index)
+            state.executeRunConfigAction(e, state.currentChosenGroup, debug = index == 1)
         }
 
         override fun update(e: AnActionEvent) {
@@ -349,9 +350,7 @@ class DelegatingRunDebugAction(
     private val action: AnAction,
     private val identifier: PsiElement,
     private val topLevelClass: PsiClass,
-    text: String,
-    icon: Icon,
-) : AnAction(text, text, icon), DumbAware {
+) : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val dataContext = SimpleDataContext.builder().apply {
             val newLocation = PsiLocation.fromPsiElement(identifier)
