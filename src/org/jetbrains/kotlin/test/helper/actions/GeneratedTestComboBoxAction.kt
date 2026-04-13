@@ -233,6 +233,10 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         "More actions",
         AllIcons.Actions.More,
     ), DumbAware {
+        init {
+            templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
+        }
+
         override fun update(e: AnActionEvent) {
             e.presentation.isPopupGroup = true
         }
