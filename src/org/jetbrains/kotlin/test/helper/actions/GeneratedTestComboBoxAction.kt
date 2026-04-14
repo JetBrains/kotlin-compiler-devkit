@@ -55,10 +55,11 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
     private val testTags: Map<String, Array<String>>
         get() = configuration.testTags
 
-    val runAllTestsAction: RunAllTestsAction = RunAllTestsAction()
+    val runAction = RunAction("Run", AllIcons.Actions.Execute, debug = false)
+    val debugAction = RunAction("Debug", AllIcons.Actions.StartDebugger, debug = true)
+    val runAndApply = RunSelectedAndApplyAction()
     val goToAction: GoToDeclaration = GoToDeclaration()
-    val runAction = RunAction(INDEX_RUN, "Run", AllIcons.Actions.Execute)
-    val debugAction = RunAction(INDEX_DEBUG, "Debug", AllIcons.Actions.StartDebugger)
+    val runAllTestsAction: RunAllTestsAction = RunAllTestsAction()
     val moreActionsGroup = MoreActionsGroup()
 
     val state: State = State()
@@ -230,11 +231,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         }
     }
 
-    inner class RunAction(private val index: Int, text: String, icon: Icon) : AnAction(text, text, icon), DumbAware {
-        override fun actionPerformed(e: AnActionEvent) {
-            state.executeRunConfigAction(e, state.currentChosenGroup, debug = index == INDEX_DEBUG)
-        }
-
+    abstract inner class AbstractRunAction(text: String, icon: Icon)  : AnAction(text, text, icon), DumbAware {
         override fun update(e: AnActionEvent) {
             val currentIndex = state.currentChosenGroup
             e.presentation.isEnabled = currentIndex in state.debugAndRunActionLists.indices ||
@@ -245,8 +242,22 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
     }
 
+    inner class RunAction(text: String, icon: Icon, private val debug: Boolean) : AbstractRunAction(text, icon)  {
+        override fun actionPerformed(e: AnActionEvent) {
+            state.executeRunConfigAction(e, state.currentChosenGroup, debug)
+        }
+
+    }
+
+    inner class RunSelectedAndApplyAction : AbstractRunAction("Run Selected && Apply Diffs", AllIcons.Diff.ApplyNotConflicts) {
+        override fun actionPerformed(e: AnActionEvent) {
+            val className = state.methodsClassNames.elementAtOrNull(state.currentChosenGroup) ?: return
+            runAndApply(e, className)
+        }
+    }
+
     inner class GoToDeclaration : AnAction(
-        "Go To Test Method",
+        "Go to Test Method",
         "Go to test method declaration",
         AllIcons.Nodes.Method
     ), DumbAware {
@@ -298,12 +309,6 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                     val config =
                         GradleRunConfig(commandLine, title, useProjectBasePath = true, runAsTest = false, debug = false)
                     runGradleCommandLine(e, config)
-                }
-            },
-            object : GradleOnlyAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts), DumbAware {
-                override fun actionPerformed(e: AnActionEvent) {
-                    val className = state.methodsClassNames.elementAtOrNull(state.currentChosenGroup) ?: return
-                    runAndApply(e, className)
                 }
             },
             object : GradleOnlyAction("Run All && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts), DumbAware {

@@ -150,6 +150,7 @@ class TestDataEditor(
                     generatedTestComboBoxAction,
                     generatedTestComboBoxAction.runAction,
                     generatedTestComboBoxAction.debugAction,
+                    generatedTestComboBoxAction.runAndApply,
                     generatedTestComboBoxAction.goToAction,
                     generatedTestComboBoxAction.runAllTestsAction,
                     generatedTestComboBoxAction.moreActionsGroup
