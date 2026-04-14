@@ -183,7 +183,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                     .collectAndRunAllTests(e, listOf(baseEditor.file), debug = debug, filterByClass = className)
             } else {
                 val action =
-                    debugAndRunActionLists.elementAtOrNull(runnerIndex)?.elementAtOrNull(if (debug) 1 else 0) ?: return
+                    debugAndRunActionLists.elementAtOrNull(runnerIndex)?.elementAtOrNull(if (debug) INDEX_DEBUG else INDEX_RUN) ?: return
                 ActionUtil.performAction(action, e)
             }
         }
@@ -232,7 +232,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
     inner class RunAction(private val index: Int, text: String, icon: Icon) : AnAction(text, text, icon), DumbAware {
         override fun actionPerformed(e: AnActionEvent) {
-            state.executeRunConfigAction(e, state.currentChosenGroup, debug = index == 1)
+            state.executeRunConfigAction(e, state.currentChosenGroup, debug = index == INDEX_DEBUG)
         }
 
         override fun update(e: AnActionEvent) {
