@@ -29,7 +29,7 @@ val VirtualFile.simpleNameUntilFirstDot: String
     }
 
 
-private val supportedExtensions = listOf("kt", "kts", "args", "can-freeze-ide")
+private val supportedExtensions = listOf("kt", "kts", "args", "can-freeze-ide", "test")
 
 enum class TestDataType {
     File,
