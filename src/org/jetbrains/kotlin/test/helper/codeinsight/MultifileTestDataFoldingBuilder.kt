@@ -48,7 +48,9 @@ internal class MultifileTestDataFoldingBuilder: CustomFoldingBuilder(), DumbAwar
             previousDirective = directive
         }
 
-        addDescriptor(text.length, previousDirective)
+        previousDirective?.let {
+            addDescriptor(text.length, it)
+        }
     }
 
     override fun getLanguagePlaceholderText(node: ASTNode, range: TextRange): String =
