@@ -50,6 +50,15 @@
 
         <executor implementation="org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsExecutor"/>
         <programRunner implementation="org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsProgramRunner"/>
+
+        <codeInsight.lineMarkerProvider
+                implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataLineMarkerProvider"
+                language=""/>
+
+        <lang.foldingBuilder
+                implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFoldingBuilder"
+                language=""/>
+
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
