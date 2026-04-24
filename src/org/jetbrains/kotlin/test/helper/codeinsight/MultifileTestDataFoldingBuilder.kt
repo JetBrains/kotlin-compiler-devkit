@@ -7,14 +7,13 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiFile
+import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataEntry
+import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataTextFileImpl
 
 internal class MultifileTestDataFoldingBuilder: CustomFoldingBuilder(), DumbAware {
 
     override fun isCustomFoldingCandidate(node: ASTNode): Boolean {
-        if (node.psi.containingFile?.multiTestDataFile == null) return false
-
-        return MODULE_FILE_PATTERN.matcher(node.text).find()
+        return node.psi is MultifileTestDataEntry
     }
 
     override fun buildLanguageFoldRegions(
@@ -23,33 +22,29 @@ internal class MultifileTestDataFoldingBuilder: CustomFoldingBuilder(), DumbAwar
         document: Document,
         quick: Boolean,
     ) {
-        val file = (root as? PsiFile)?.multiTestDataFile ?: return
-        val text = file.text
-        val matcher = MODULE_FILE_PATTERN.matcher(text)
+        val file = root as? MultifileTestDataTextFileImpl ?: return
 
-        var previousDirective: String? = null
-        var previousStart: Int? = null
+        for (entry in file.entries) {
+            val content = entry.content
+            if (content?.textContains('\n') != true) continue
 
-        fun addDescriptor(end: Int, name: String?) {
-            val textRange = TextRange(previousStart ?: 0, end)
-            val descriptor = FoldingDescriptor(root, textRange)
-            descriptor.placeholderText = name + Typography.ellipsis.toString()
-            descriptors += descriptor
-        }
+            val entityRange = entry.textRange
+            val range = TextRange(entityRange.startOffset, entityRange.endOffset - 1)
+            descriptors +=
+                FoldingDescriptor(entry.node, range).apply {
+                    placeholderText = entry.placeholderText + " " + Typography.ellipsis
+                }
 
-        while (matcher.find()) {
-            val start = matcher.start()
-            val directive = matcher.group(0).trim()
-
-            if (previousStart != null) {
-                addDescriptor(start - 1, previousDirective)
+            if (entry.moduleHeader != null) {
+                val fileHeader = entry.fileHeader
+                if (fileHeader != null) {
+                    val textRange = fileHeader.textRange
+                    descriptors +=
+                        FoldingDescriptor(fileHeader.node, TextRange(textRange.startOffset, range.endOffset)).apply {
+                            placeholderText = fileHeader.placeholderText + " " + Typography.ellipsis
+                        }
+                }
             }
-            previousStart = start
-            previousDirective = directive
-        }
-
-        previousDirective?.let {
-            addDescriptor(text.length, it)
         }
     }
 

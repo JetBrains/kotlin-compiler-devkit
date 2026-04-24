@@ -1,0 +1,39 @@
+package org.jetbrains.kotlin.test.helper.lang
+
+import com.intellij.openapi.fileTypes.FileType
+import com.intellij.psi.FileViewProvider
+import com.intellij.psi.HintedReferenceHost
+import com.intellij.psi.PsiElementVisitor
+import com.intellij.psi.PsiPlainTextFile
+import com.intellij.psi.PsiReference
+import com.intellij.psi.PsiReferenceService.Hints
+import com.intellij.psi.impl.source.PsiFileImpl
+import com.intellij.psi.impl.source.resolve.reference.ReferenceProvidersRegistry
+import com.intellij.psi.util.PsiTreeUtil
+
+class MultifileTestDataTextFileImpl(viewProvider: FileViewProvider) :
+    PsiFileImpl(MULTIFILE_TEXT_FILE, MULTIFILE_TEXT_FILE, viewProvider),
+    PsiPlainTextFile,
+    HintedReferenceHost {
+    override fun accept(visitor: PsiElementVisitor) {
+        visitor.visitFile(this)
+    }
+
+    override fun toString(): String =
+        "PsiFile(multifile test data): $name"
+
+    override fun getFileType(): FileType =
+        MultifileTestDataFileType
+
+    override fun getReferences(): Array<PsiReference?> =
+        ReferenceProvidersRegistry.getReferencesFromProviders(this)
+
+    override fun getReferences(hints: Hints): Array<PsiReference?> =
+        ReferenceProvidersRegistry.getReferencesFromProviders(this, hints)
+
+    override fun shouldAskParentForReferences(hints: Hints): Boolean =
+        false
+
+    internal val entries: List<MultifileTestDataEntry>
+        get() = PsiTreeUtil.getChildrenOfTypeAsList(this, MultifileTestDataEntry::class.java)
+}
