@@ -59,6 +59,14 @@
                 implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFoldingBuilder"
                 language=""/>
 
+        <fileType name="MultifileTestData" implementationClass="org.jetbrains.kotlin.test.helper.lang.MultifileTestDataFileType"
+                  fieldName="INSTANCE" language="multifileTestData"/>
+
+        <lang.parserDefinition language="multifileTestData" implementationClass="org.jetbrains.kotlin.test.helper.lang.MultifileTestDataParserDefinition" />
+
+        <fileTypeOverrider implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFileTypeOverrider"/>
+
+        <multiHostInjector implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataMultiHostInjector"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
