@@ -11,7 +11,31 @@ import com.intellij.psi.LiteralTextEscaper
 import com.intellij.psi.PsiLanguageInjectionHost
 import com.intellij.psi.util.PsiTreeUtil
 
-internal class MultifileTestDataPreamble(node: ASTNode) : ASTWrapperPsiElement(node)
+internal abstract class InjectableLanguageInjectionHost(node: ASTNode) : ASTWrapperPsiElement(node), PsiLanguageInjectionHost {
+    override fun isValidHost(): Boolean = true
+
+    override fun updateText(text: String): PsiLanguageInjectionHost = this
+
+    override fun createLiteralTextEscaper(): LiteralTextEscaper<PsiLanguageInjectionHost> =
+        object : LiteralTextEscaper<PsiLanguageInjectionHost>(this) {
+            override fun decode(
+                rangeInsideHost: TextRange,
+                outChars: StringBuilder,
+            ): Boolean {
+                outChars.append(rangeInsideHost.substring(myHost.text))
+                return true
+            }
+
+            override fun getOffsetInHost(
+                offsetInDecoded: Int,
+                rangeInsideHost: TextRange,
+            ): Int = (rangeInsideHost.startOffset + offsetInDecoded).coerceAtMost(rangeInsideHost.endOffset)
+
+            override fun isOneLine(): Boolean = false
+        }
+}
+
+internal class MultifileTestDataPreamble(node: ASTNode) : InjectableLanguageInjectionHost(node)
 
 internal class MultifileTestDataEntry(node: ASTNode) : ASTWrapperPsiElement(node) {
     val moduleHeader: MultifileTestDataModuleHeader?
@@ -71,29 +95,7 @@ internal class MultifileTestDataFileHeader(node: ASTNode) : MultifileTestDataDir
             .let { fileType -> (fileType as? LanguageFileType)?.language ?: PlainTextLanguage.INSTANCE }
 }
 
-internal class MultifileTestDataFileContent(node: ASTNode) : ASTWrapperPsiElement(node), PsiLanguageInjectionHost {
+internal class MultifileTestDataFileContent(node: ASTNode) : InjectableLanguageInjectionHost(node) {
     val entry: MultifileTestDataEntry?
         get() = parent as? MultifileTestDataEntry
-
-    override fun isValidHost(): Boolean = true
-
-    override fun updateText(text: String): PsiLanguageInjectionHost = this
-
-    override fun createLiteralTextEscaper(): LiteralTextEscaper<out PsiLanguageInjectionHost> =
-        object : LiteralTextEscaper<MultifileTestDataFileContent>(this) {
-            override fun decode(
-                rangeInsideHost: TextRange,
-                outChars: StringBuilder,
-            ): Boolean {
-                outChars.append(rangeInsideHost.substring(myHost.text))
-                return true
-            }
-
-            override fun getOffsetInHost(
-                offsetInDecoded: Int,
-                rangeInsideHost: TextRange,
-            ): Int = (rangeInsideHost.startOffset + offsetInDecoded).coerceAtMost(rangeInsideHost.endOffset)
-
-            override fun isOneLine(): Boolean = false
-        }
 }
