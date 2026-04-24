@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.test.helper.reference
 
+import com.intellij.injected.editor.VirtualFileWindow
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.*
@@ -18,9 +19,10 @@ class DirectiveReferenceContributor : PsiReferenceContributor() {
                     element: PsiElement,
                     context: ProcessingContext
                 ): Array<PsiReference> {
-                    val file =
-                        element.containingFile?.virtualFile ?: return PsiReference.EMPTY_ARRAY
-                    if (file.getTestDataType(element.project) == null) return PsiReference.EMPTY_ARRAY
+                    element.containingFile?.virtualFile
+                        ?.let { (it as? VirtualFileWindow)?.delegate ?: it }
+                        ?.takeIf { it.getTestDataType(element.project) != null }
+                        ?: return PsiReference.EMPTY_ARRAY
 
                     val text = element.text
                     val refs = mutableListOf<PsiReference>()
