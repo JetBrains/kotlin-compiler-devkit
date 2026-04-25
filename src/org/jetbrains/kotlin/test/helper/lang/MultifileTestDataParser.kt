@@ -27,11 +27,9 @@ class MultifileTestDataParser : PsiParser {
     }
 
     private fun parsePreamble(builder: PsiBuilder) {
-        if (builder.tokenType == MULTIFILE_PREAMBLE_TEXT) {
+        if (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
             val preamble = builder.mark()
-            while (builder.tokenType == MULTIFILE_PREAMBLE_TEXT) {
-                builder.advanceLexer()
-            }
+            parseBlockBody(builder)
             preamble.done(MULTIFILE_PREAMBLE)
         }
     }
@@ -47,6 +45,10 @@ class MultifileTestDataParser : PsiParser {
             val moduleHeader = builder.mark()
             builder.advanceLexer()
             moduleHeader.done(MULTIFILE_MODULE_HEADER)
+
+            while (builder.tokenType == MULTIFILE_NEW_LINE) {
+                builder.advanceLexer()
+            }
         }
 
         if (builder.tokenType == MULTIFILE_FILE_LINE) {
@@ -61,13 +63,23 @@ class MultifileTestDataParser : PsiParser {
 
         if (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
             val content = builder.mark()
-            while (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
-                builder.advanceLexer()
-            }
+            parseBlockBody(builder)
             content.done(MULTIFILE_FILE_CONTENT)
         }
 
         entry.done(MULTIFILE_ENTRY)
         return true
+    }
+
+    private fun parseBlockBody(builder: PsiBuilder) {
+        while (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
+            if (builder.tokenType == MULTIFILE_TEXT_BLOCK) {
+                val textBlock = builder.mark()
+                builder.advanceLexer()
+                textBlock.done(MULTIFILE_TEXT_BLOCK_ELEMENT)
+                continue
+            }
+            builder.advanceLexer()
+        }
     }
 }

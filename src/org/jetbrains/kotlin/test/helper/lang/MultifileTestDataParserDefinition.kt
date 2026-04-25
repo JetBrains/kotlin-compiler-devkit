@@ -33,6 +33,7 @@ class MultifileTestDataParserDefinition : ParserDefinition {
             MULTIFILE_MODULE_HEADER -> MultifileTestDataModuleHeader(node)
             MULTIFILE_FILE_HEADER -> MultifileTestDataFileHeader(node)
             MULTIFILE_FILE_CONTENT -> MultifileTestDataFileContent(node)
+            MULTIFILE_TEXT_BLOCK_ELEMENT -> MultifileTestDataTextBlock(node)
             else -> ASTWrapperPsiElement(node)
         }
 
