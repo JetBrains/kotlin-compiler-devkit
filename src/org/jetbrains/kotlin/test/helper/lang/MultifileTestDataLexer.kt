@@ -1,7 +1,6 @@
 package org.jetbrains.kotlin.test.helper.lang
 
 import com.intellij.lexer.LexerBase
-import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
 
 class MultifileTestDataLexer : LexerBase() {
@@ -62,23 +61,18 @@ class MultifileTestDataLexer : LexerBase() {
         when {
             isStructuralModuleHeaderAt(tokenStart) -> setToken(MULTIFILE_MODULE_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
             isFileHeaderAt(tokenStart) -> setToken(MULTIFILE_FILE_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
-            else -> {
-                tokenType = MULTIFILE_PREAMBLE_TEXT
-                tokenEnd = nextBoundaryOffset(tokenStart)
-                state = BEFORE_FIRST_ENTRY
-            }
+            isBlankLine(tokenStart) -> setToken(MULTIFILE_NEW_LINE, lineEnd(tokenStart), BEFORE_FIRST_ENTRY)
+            isCommentLine(tokenStart) -> setToken(MULTIFILE_COMMENT_LINE, lineEnd(tokenStart), BEFORE_FIRST_ENTRY)
+            else -> setToken(MULTIFILE_TEXT_BLOCK, nextTextBlockEnd(tokenStart), BEFORE_FIRST_ENTRY)
         }
     }
 
     private fun locateAfterModuleHeader() {
         when {
-            isWhitespaceLine(tokenStart) -> setToken(TokenType.WHITE_SPACE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
+            isBlankLine(tokenStart) -> setToken(MULTIFILE_NEW_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
             isFileHeaderAt(tokenStart) -> setToken(MULTIFILE_FILE_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
-            else -> {
-                tokenType = MULTIFILE_CONTENT_TEXT
-                tokenEnd = nextBoundaryOffset(tokenStart)
-                state = AFTER_FILE_HEADER
-            }
+            isCommentLine(tokenStart) -> setToken(MULTIFILE_COMMENT_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
+            else -> setToken(MULTIFILE_TEXT_BLOCK, nextTextBlockEnd(tokenStart), AFTER_FILE_HEADER)
         }
     }
 
@@ -86,11 +80,9 @@ class MultifileTestDataLexer : LexerBase() {
         when {
             isStructuralModuleHeaderAt(tokenStart) -> setToken(MULTIFILE_MODULE_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
             isFileHeaderAt(tokenStart) -> setToken(MULTIFILE_FILE_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
-            else -> {
-                tokenType = MULTIFILE_CONTENT_TEXT
-                tokenEnd = nextBoundaryOffset(tokenStart)
-                state = AFTER_FILE_HEADER
-            }
+            isBlankLine(tokenStart) -> setToken(MULTIFILE_NEW_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
+            isCommentLine(tokenStart) -> setToken(MULTIFILE_COMMENT_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
+            else -> setToken(MULTIFILE_TEXT_BLOCK, nextTextBlockEnd(tokenStart), AFTER_FILE_HEADER)
         }
     }
 
@@ -104,10 +96,23 @@ class MultifileTestDataLexer : LexerBase() {
         state = newState
     }
 
-    private fun nextBoundaryOffset(offset: Int): Int {
+    private fun isStructuralModuleHeaderAt(offset: Int): Boolean {
+        if (!isDirectiveLine(offset, "MODULE")) {
+            return false
+        }
+
+        var nextOffset = lineEnd(offset)
+        while (nextOffset < endOffset && isBlankLine(nextOffset)) {
+            nextOffset = lineEnd(nextOffset)
+        }
+
+        return nextOffset < endOffset && isFileHeaderAt(nextOffset)
+    }
+
+    private fun nextTextBlockEnd(offset: Int): Int {
         var cursor = offset
         while (cursor < endOffset) {
-            if (isFileHeaderAt(cursor) || isStructuralModuleHeaderAt(cursor)) {
+            if (isStructuralModuleHeaderAt(cursor) || isFileHeaderAt(cursor)) {
                 return cursor
             }
             cursor = lineEnd(cursor)
@@ -115,20 +120,10 @@ class MultifileTestDataLexer : LexerBase() {
         return endOffset
     }
 
-    private fun isStructuralModuleHeaderAt(offset: Int): Boolean {
-        if (!isDirectiveLine(offset, "MODULE")) {
-            return false
-        }
-
-        var nextOffset = lineEnd(offset)
-        while (nextOffset < endOffset && isWhitespaceLine(nextOffset)) {
-            nextOffset = lineEnd(nextOffset)
-        }
-
-        return nextOffset < endOffset && isFileHeaderAt(nextOffset)
-    }
-
     private fun isFileHeaderAt(offset: Int): Boolean = isDirectiveLine(offset, "FILE")
+
+    private fun isCommentLine(offset: Int): Boolean =
+        startsWithDoubleSlash(offset) && !isFileHeaderAt(offset) && !isStructuralModuleHeaderAt(offset)
 
     private fun isDirectiveLine(
         offset: Int,
@@ -157,7 +152,10 @@ class MultifileTestDataLexer : LexerBase() {
         return cursor + directivePrefix.length <= lineEndWithoutSeparator(offset)
     }
 
-    private fun isWhitespaceLine(offset: Int): Boolean {
+    private fun startsWithDoubleSlash(offset: Int): Boolean =
+        offset + 1 < endOffset && buffer[offset] == '/' && buffer[offset + 1] == '/'
+
+    private fun isBlankLine(offset: Int): Boolean {
         val end = lineEndWithoutSeparator(offset)
         for (index in offset until end) {
             if (!buffer[index].isWhitespace()) {

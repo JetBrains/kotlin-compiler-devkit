@@ -99,3 +99,11 @@ internal class MultifileTestDataFileContent(node: ASTNode) : InjectableLanguageI
     val entry: MultifileTestDataEntry?
         get() = parent as? MultifileTestDataEntry
 }
+
+internal class MultifileTestDataTextBlock(node: ASTNode) : InjectableLanguageInjectionHost(node) {
+    val fileContent: MultifileTestDataFileContent?
+        get() = parent as? MultifileTestDataFileContent
+
+    val preamble: MultifileTestDataPreamble?
+        get() = parent as? MultifileTestDataPreamble
+}

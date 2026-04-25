@@ -8,12 +8,14 @@ class MultifileTestDataLexerTest {
     fun `keeps preamble before first file and parses subsequent entries`() {
         assertEquals(
             listOf(
-                "MULTIFILE_PREAMBLE_TEXT:// FIR_IDENTICAL\\n// SKIP_TXT\\n\\n",
+                "MULTIFILE_COMMENT_LINE:// FIR_IDENTICAL\\n",
+                "MULTIFILE_COMMENT_LINE:// SKIP_TXT\\n",
+                "MULTIFILE_NEW_LINE:\\n",
                 "MULTIFILE_MODULE_LINE:// MODULE: moduleA\\n",
                 "MULTIFILE_FILE_LINE:// FILE: a.kt\\n",
-                "MULTIFILE_CONTENT_TEXT:package sample\\n\\nclass A\\n",
+                "MULTIFILE_TEXT_BLOCK:package sample\\n\\nclass A\\n",
                 "MULTIFILE_FILE_LINE:// FILE: b.java\\n",
-                "MULTIFILE_CONTENT_TEXT:class B {}",
+                "MULTIFILE_TEXT_BLOCK:class B {}",
             ),
             tokenize(
                 """
@@ -33,11 +35,71 @@ class MultifileTestDataLexerTest {
     }
 
     @Test
+    fun `treats non comment text before first file as content not preamble`() {
+        assertEquals(
+            listOf(
+                "MULTIFILE_TEXT_BLOCK:package stray\\n",
+                "MULTIFILE_FILE_LINE:// FILE: sample.kt\\n",
+                "MULTIFILE_TEXT_BLOCK:class A",
+            ),
+            tokenize(
+                """
+                package stray
+                // FILE: sample.kt
+                class A
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
+    fun `unsplit file may live entirely in top level preamble block`() {
+        assertEquals(
+            listOf(
+                "MULTIFILE_COMMENT_LINE:// LANGUAGE: +ContextParameters\\n",
+                "MULTIFILE_NEW_LINE:\\n",
+                "MULTIFILE_TEXT_BLOCK:package sample\\n\\nclass A",
+            ),
+            tokenize(
+                """
+                // LANGUAGE: +ContextParameters
+                
+                package sample
+                
+                class A
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
+    fun `content block may start with comment preamble before actual text`() {
+        assertEquals(
+            listOf(
+                "MULTIFILE_FILE_LINE:// FILE: sample.kt\\n",
+                "MULTIFILE_COMMENT_LINE:// LANGUAGE: +ContextParameters\\n",
+                "MULTIFILE_COMMENT_LINE:// WITH_STDLIB\\n",
+                "MULTIFILE_NEW_LINE:\\n",
+                "MULTIFILE_TEXT_BLOCK:class A",
+            ),
+            tokenize(
+                """
+                // FILE: sample.kt
+                // LANGUAGE: +ContextParameters
+                // WITH_STDLIB
+                
+                class A
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
     fun `does not split on indented file marker inside content`() {
         assertEquals(
             listOf(
                 "MULTIFILE_FILE_LINE:// FILE: sample.kt\\n",
-                "MULTIFILE_CONTENT_TEXT:fun example() {\\n    // FILE: not-a-header.kt\\n}",
+                "MULTIFILE_TEXT_BLOCK:fun example() {\\n    // FILE: not-a-header.kt\\n}",
             ),
             tokenize(
                 """
@@ -55,7 +117,7 @@ class MultifileTestDataLexerTest {
         assertEquals(
             listOf(
                 "MULTIFILE_FILE_LINE:// FILE: sample.kt\\n",
-                "MULTIFILE_CONTENT_TEXT:fun example() {\\n// MODULE: not-structural\\nprintln(42)\\n}",
+                "MULTIFILE_TEXT_BLOCK:fun example() {\\n// MODULE: not-structural\\nprintln(42)\\n}",
             ),
             tokenize(
                 """
