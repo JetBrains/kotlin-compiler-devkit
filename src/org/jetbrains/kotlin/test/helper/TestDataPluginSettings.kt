@@ -14,6 +14,7 @@ import com.intellij.ui.PanelWithButtons
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.panel
+import org.jetbrains.kotlin.test.helper.ui.settings.IgnoredLanguagesForInjectionPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.RelatedFileSearchPathsPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.TestDataPathEntriesPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.TestTagsEntriesPanel
@@ -27,7 +28,13 @@ class PluginSettingsState(
     var testDataDirectories: MutableList<VirtualFile>,
     var relatedFileSearchPaths: MutableList<Pair<VirtualFile, List<String>>>,
     var testTags: MutableList<Pair<String, List<String>>>,
+    var ignoredLanguagesForInjection: MutableList<String>,
 )
+
+internal val defaultIgnoredLanguagesForInjection: List<String> =
+    listOf("Kotlin", "Java")
+
+private const val TEST_DATA_FILE_PLACEHOLDER: String = "$" + "TEST_DATA_FILE$"
 
 @Service(Service.Level.PROJECT)
 @State(name = "TestDataPluginSettings", storages = [(Storage("kotlinTestDataPluginTestDataPaths.xml"))])
@@ -48,12 +55,20 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
 
     var testTags: Map<String, Array<String>> = emptyMap()
 
+    var ignoredLanguagesForInjection: Array<String> = defaultIgnoredLanguagesForInjection.toTypedArray()
+
     override fun getState(): TestDataPathsConfiguration {
         return this
     }
 
     override fun loadState(state: TestDataPathsConfiguration) {
-        loadState(state.testDataFiles, state.testDataDirectories, state.relatedFilesSearchPaths, state.testTags)
+        loadState(
+            state.testDataFiles,
+            state.testDataDirectories,
+            state.relatedFilesSearchPaths,
+            state.testTags,
+            state.ignoredLanguagesForInjection,
+        )
     }
 
     fun loadState(
@@ -61,6 +76,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newTestDataDirectories: List<VirtualFile>,
         newRelatedFilesSearchPaths: List<Pair<VirtualFile, List<String>>>,
         newTestTags: List<Pair<String, List<String>>>,
+        newIgnoredLanguagesForInjection: List<String>,
     ) {
         loadState(
             newTestDataFiles.map { it.path }.toTypedArray(),
@@ -73,6 +89,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
                 keySelector = { it.first },
                 valueTransform = { it.second.toTypedArray() }
             ),
+            newIgnoredLanguagesForInjection.toTypedArray(),
         )
     }
 
@@ -81,11 +98,13 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newTestDataDirectories: Array<String>,
         newRelatedFilesSearchPaths: Map<String, Array<String>>,
         newTestTags: Map<String, Array<String>>,
+        newIgnoredLanguagesForInjection: Array<String>,
     ) {
         testDataFiles = newTestDataFiles.copyOf()
         testDataDirectories = newTestDataDirectories.copyOf()
         relatedFilesSearchPaths = newRelatedFilesSearchPaths.toMap()
         testTags = newTestTags.toMap()
+        ignoredLanguagesForInjection = newIgnoredLanguagesForInjection.copyOf()
     }
 
     /**
@@ -113,7 +132,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
                     val testDataFileReplacement = baseFilePath.relativeTo(testDataSubdirPath).parent
                         ?.resolve(simpleNameUntilFirstDot)?.pathString
                         ?: simpleNameUntilFirstDot
-                    val actualSearchPath = searchPath.replace("\$TEST_DATA_FILE$", testDataFileReplacement).trim()
+                    val actualSearchPath = searchPath.replace(TEST_DATA_FILE_PLACEHOLDER, testDataFileReplacement).trim()
 
                     if (run(actualSearchPath))
                         return true
@@ -152,7 +171,8 @@ class TestDataPathsConfigurable(private val project: Project) :
         testDataFiles = resetTestData(isFiles = true),
         testDataDirectories = resetTestData(isFiles = false),
         relatedFileSearchPaths = resetRelatedFileSearchPaths(),
-        testTags = resetTestTags()
+        testTags = resetTestTags(),
+        ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection(),
     )
 
     private var testDataFiles: MutableList<VirtualFile>
@@ -170,6 +190,10 @@ class TestDataPathsConfigurable(private val project: Project) :
     private var testTags: MutableList<Pair<String, List<String>>>
         get() = state.testTags
         set(value) { state.testTags = value }
+
+    private var ignoredLanguagesForInjection: MutableList<String>
+        get() = state.ignoredLanguagesForInjection
+        set(value) { state.ignoredLanguagesForInjection = value }
 
     // -------------------------------- state initialization --------------------------------
 
@@ -191,6 +215,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         }
     }
 
+    private fun resetIgnoredLanguagesForInjection(): MutableList<String> {
+        return configuration.ignoredLanguagesForInjection.toMutableList()
+    }
+
     // -------------------------------- panels --------------------------------
 
     private val testDataFilesPathPanel: TestDataPathEntriesPanel by lazy {
@@ -209,6 +237,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         TestTagsEntriesPanel(state)
     }
 
+    private val ignoredLanguagesForInjectionPanel: IgnoredLanguagesForInjectionPanel by lazy {
+        IgnoredLanguagesForInjectionPanel(state)
+    }
+
     override fun createPanel(): DialogPanel {
         fun Panel.panelRow(title: String, panel: PanelWithButtons) {
             row(title) {}
@@ -223,6 +255,7 @@ class TestDataPathsConfigurable(private val project: Project) :
             panelRow("Test data directories:", testDataDirectoriesPathPanel)
             panelRow("Related file search paths:", relatedFilesSearchPathsPanel)
             panelRow("Test tags:", testTagsPanel)
+            panelRow("Ignored injected languages:", ignoredLanguagesForInjectionPanel)
         }
     }
 
@@ -245,20 +278,28 @@ class TestDataPathsConfigurable(private val project: Project) :
 
     private fun relatedFilesSearchPathsModified(): Boolean {
         val pathsFromConfiguration = configuration.relatedFilesSearchPaths
-        if (pathsFromConfiguration.size != relatedFileSearchPaths.size) return true
-        return pathsFromConfiguration.asSequence().zip(relatedFileSearchPaths.asSequence())
+        return pathsFromConfiguration.size != relatedFileSearchPaths.size || pathsFromConfiguration.asSequence().zip(relatedFileSearchPaths.asSequence())
             .any { it.first.key != it.second.first.path || it.first.value.toList() != it.second.second }
     }
 
     private fun testTagsModified(): Boolean {
         val tagsFromConfiguration = configuration.testTags
-        if (tagsFromConfiguration.size != testTags.size) return true
-        return tagsFromConfiguration.asSequence().zip(testTags.asSequence())
+        return tagsFromConfiguration.size != testTags.size || tagsFromConfiguration.asSequence().zip(testTags.asSequence())
             .any { it.first.key != it.second.first || it.first.value.toList() != it.second.second }
     }
 
+    private fun ignoredLanguagesForInjectionModified(): Boolean {
+        val ignoredLanguagesFromConfiguration = configuration.ignoredLanguagesForInjection
+        return ignoredLanguagesFromConfiguration.size != ignoredLanguagesForInjection.size || ignoredLanguagesFromConfiguration.asSequence().zip(ignoredLanguagesForInjection.asSequence())
+            .any { it.first != it.second }
+    }
+
     override fun isModified(): Boolean {
-        return testDataModified(isFiles = true) || testDataModified(isFiles = false) || relatedFilesSearchPathsModified() || testTagsModified()
+        return testDataModified(isFiles = true) ||
+            testDataModified(isFiles = false) ||
+            relatedFilesSearchPathsModified() ||
+            testTagsModified() ||
+            ignoredLanguagesForInjectionModified()
     }
 
     override fun reset() {
@@ -266,13 +307,17 @@ class TestDataPathsConfigurable(private val project: Project) :
         testDataFiles = resetTestData(isFiles = true)
         testDataDirectories = resetTestData(isFiles = false)
         relatedFileSearchPaths = resetRelatedFileSearchPaths()
+        testTags = resetTestTags()
+        ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection()
         (testDataFilesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (testDataDirectoriesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (relatedFilesSearchPathsPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
+        (testTagsPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
+        (ignoredLanguagesForInjectionPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
     }
 
     override fun apply() {
         super.apply()
-        configuration.loadState(testDataFiles, testDataDirectories, relatedFileSearchPaths, testTags)
+        configuration.loadState(testDataFiles, testDataDirectories, relatedFileSearchPaths, testTags, ignoredLanguagesForInjection)
     }
 }

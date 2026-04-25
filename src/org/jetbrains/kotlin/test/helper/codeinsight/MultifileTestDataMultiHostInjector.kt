@@ -1,23 +1,22 @@
 package org.jetbrains.kotlin.test.helper.codeinsight
 
-import com.intellij.lang.Language
-import com.intellij.lang.injection.*
-import com.intellij.lang.java.JavaLanguage
+import com.intellij.lang.injection.MultiHostInjector
+import com.intellij.lang.injection.MultiHostRegistrar
 import com.intellij.openapi.util.TextRange
-import com.intellij.psi.*
+import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiLanguageInjectionHost
 import com.intellij.psi.impl.source.tree.PsiCommentImpl
 import org.jetbrains.annotations.Unmodifiable
 import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataFileContent
 import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataTextBlock
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 
 class MultifileTestDataMultiHostInjector: MultiHostInjector {
     private val supportedElementTypes: List<Class<out PsiElement>> =
-        listOf(MultifileTestDataFileContent::class.java, PsiCommentImpl::class.java)
-
-    private val ignoredLanguagesForInjection: Set<Language> =
-        setOf(KotlinLanguage.INSTANCE, JavaLanguage.INSTANCE)
+        listOf(MultifileTestDataFileContent::class.java, PsiComment::class.java, MultifileTestDataTextBlock::class.java)
 
     override fun getLanguagesToInject(
         registrar: MultiHostRegistrar,
@@ -35,7 +34,11 @@ class MultifileTestDataMultiHostInjector: MultiHostInjector {
         } ?: return
 
         if (textBlock.fileContent != null) {
-            if (language in ignoredLanguagesForInjection) {
+            val ignoredLanguageIds =
+                TestDataPathsConfiguration.getInstance(context.project)
+                    .ignoredLanguagesForInjection
+                    .mapTo(hashSetOf(), String::toLowerCaseAsciiOnly)
+            if (language.id.toLowerCaseAsciiOnly() in ignoredLanguageIds) {
                 return
             }
         }
