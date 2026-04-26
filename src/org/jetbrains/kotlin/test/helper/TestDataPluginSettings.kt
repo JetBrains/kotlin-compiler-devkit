@@ -10,6 +10,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.PanelWithButtons
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
@@ -29,6 +30,7 @@ class PluginSettingsState(
     var relatedFileSearchPaths: MutableList<Pair<VirtualFile, List<String>>>,
     var testTags: MutableList<Pair<String, List<String>>>,
     var ignoredLanguagesForInjection: MutableList<String>,
+    var multifilePartsSeparator: Boolean,
 )
 
 internal val defaultIgnoredLanguagesForInjection: List<String> =
@@ -57,6 +59,8 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
 
     var ignoredLanguagesForInjection: Array<String> = defaultIgnoredLanguagesForInjection.toTypedArray()
 
+    var multifilePartsSeparator: Boolean = true
+
     override fun getState(): TestDataPathsConfiguration {
         return this
     }
@@ -68,6 +72,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
             state.relatedFilesSearchPaths,
             state.testTags,
             state.ignoredLanguagesForInjection,
+            state.multifilePartsSeparator,
         )
     }
 
@@ -77,6 +82,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newRelatedFilesSearchPaths: List<Pair<VirtualFile, List<String>>>,
         newTestTags: List<Pair<String, List<String>>>,
         newIgnoredLanguagesForInjection: List<String>,
+        newMultifilePartsSeparator: Boolean,
     ) {
         loadState(
             newTestDataFiles.map { it.path }.toTypedArray(),
@@ -90,6 +96,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
                 valueTransform = { it.second.toTypedArray() }
             ),
             newIgnoredLanguagesForInjection.toTypedArray(),
+            newMultifilePartsSeparator,
         )
     }
 
@@ -99,12 +106,14 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newRelatedFilesSearchPaths: Map<String, Array<String>>,
         newTestTags: Map<String, Array<String>>,
         newIgnoredLanguagesForInjection: Array<String>,
+        newMultifilePartsSeparator: Boolean,
     ) {
         testDataFiles = newTestDataFiles.copyOf()
         testDataDirectories = newTestDataDirectories.copyOf()
         relatedFilesSearchPaths = newRelatedFilesSearchPaths.toMap()
         testTags = newTestTags.toMap()
         ignoredLanguagesForInjection = newIgnoredLanguagesForInjection.copyOf()
+        multifilePartsSeparator = newMultifilePartsSeparator
     }
 
     /**
@@ -173,6 +182,7 @@ class TestDataPathsConfigurable(private val project: Project) :
         relatedFileSearchPaths = resetRelatedFileSearchPaths(),
         testTags = resetTestTags(),
         ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection(),
+        multifilePartsSeparator = resetMultifilePartsSeparator(),
     )
 
     private var testDataFiles: MutableList<VirtualFile>
@@ -194,6 +204,10 @@ class TestDataPathsConfigurable(private val project: Project) :
     private var ignoredLanguagesForInjection: MutableList<String>
         get() = state.ignoredLanguagesForInjection
         set(value) { state.ignoredLanguagesForInjection = value }
+
+    private var multifilePartsSeparator: Boolean
+        get() = state.multifilePartsSeparator
+        set(value) { state.multifilePartsSeparator = value }
 
     // -------------------------------- state initialization --------------------------------
 
@@ -219,6 +233,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         return configuration.ignoredLanguagesForInjection.toMutableList()
     }
 
+    private fun resetMultifilePartsSeparator(): Boolean {
+        return configuration.multifilePartsSeparator
+    }
+
     // -------------------------------- panels --------------------------------
 
     private val testDataFilesPathPanel: TestDataPathEntriesPanel by lazy {
@@ -241,6 +259,14 @@ class TestDataPathsConfigurable(private val project: Project) :
         IgnoredLanguagesForInjectionPanel(state)
     }
 
+    private val multifilePartsSeparatorCheckbox: JBCheckBox by lazy {
+        JBCheckBox("Show separators between multifile test data parts", state.multifilePartsSeparator).apply {
+            addChangeListener {
+                state.multifilePartsSeparator = isSelected
+            }
+        }
+    }
+
     override fun createPanel(): DialogPanel {
         fun Panel.panelRow(title: String, panel: PanelWithButtons) {
             row(title) {}
@@ -256,6 +282,9 @@ class TestDataPathsConfigurable(private val project: Project) :
             panelRow("Related file search paths:", relatedFilesSearchPathsPanel)
             panelRow("Test tags:", testTagsPanel)
             panelRow("Ignored injected languages:", ignoredLanguagesForInjectionPanel)
+            row {
+                cell(multifilePartsSeparatorCheckbox)
+            }
         }
     }
 
@@ -294,12 +323,17 @@ class TestDataPathsConfigurable(private val project: Project) :
             .any { it.first != it.second }
     }
 
+    private fun multifilePartsSeparatorModified(): Boolean {
+        return configuration.multifilePartsSeparator != multifilePartsSeparator
+    }
+
     override fun isModified(): Boolean {
         return testDataModified(isFiles = true) ||
             testDataModified(isFiles = false) ||
             relatedFilesSearchPathsModified() ||
             testTagsModified() ||
-            ignoredLanguagesForInjectionModified()
+            ignoredLanguagesForInjectionModified() ||
+            multifilePartsSeparatorModified()
     }
 
     override fun reset() {
@@ -309,6 +343,8 @@ class TestDataPathsConfigurable(private val project: Project) :
         relatedFileSearchPaths = resetRelatedFileSearchPaths()
         testTags = resetTestTags()
         ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection()
+        multifilePartsSeparator = resetMultifilePartsSeparator()
+        multifilePartsSeparatorCheckbox.isSelected = multifilePartsSeparator
         (testDataFilesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (testDataDirectoriesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (relatedFilesSearchPathsPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
@@ -318,6 +354,13 @@ class TestDataPathsConfigurable(private val project: Project) :
 
     override fun apply() {
         super.apply()
-        configuration.loadState(testDataFiles, testDataDirectories, relatedFileSearchPaths, testTags, ignoredLanguagesForInjection)
+        configuration.loadState(
+            testDataFiles,
+            testDataDirectories,
+            relatedFileSearchPaths,
+            testTags,
+            ignoredLanguagesForInjection,
+            multifilePartsSeparator,
+        )
     }
 }
