@@ -11,6 +11,7 @@ import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.PanelWithButtons
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
@@ -19,6 +20,8 @@ import org.jetbrains.kotlin.test.helper.ui.settings.IgnoredLanguagesForInjection
 import org.jetbrains.kotlin.test.helper.ui.settings.RelatedFileSearchPathsPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.TestDataPathEntriesPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.TestTagsEntriesPanel
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 import javax.swing.table.AbstractTableModel
 import kotlin.io.path.Path
 import kotlin.io.path.pathString
@@ -31,10 +34,14 @@ class PluginSettingsState(
     var testTags: MutableList<Pair<String, List<String>>>,
     var ignoredLanguagesForInjection: MutableList<String>,
     var multifilePartsSeparator: Boolean,
+    var directiveClassId: String,
 )
 
 internal val defaultIgnoredLanguagesForInjection: List<String> =
     listOf("Kotlin", "Java")
+
+internal const val defaultDirectiveClassId: String =
+    "org.jetbrains.kotlin.test.directives.model.Directive"
 
 private const val TEST_DATA_FILE_PLACEHOLDER: String = "$" + "TEST_DATA_FILE$"
 
@@ -61,6 +68,8 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
 
     var multifilePartsSeparator: Boolean = true
 
+    var directiveClassId: String = defaultDirectiveClassId
+
     override fun getState(): TestDataPathsConfiguration {
         return this
     }
@@ -73,6 +82,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
             state.testTags,
             state.ignoredLanguagesForInjection,
             state.multifilePartsSeparator,
+            state.directiveClassId,
         )
     }
 
@@ -83,6 +93,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newTestTags: List<Pair<String, List<String>>>,
         newIgnoredLanguagesForInjection: List<String>,
         newMultifilePartsSeparator: Boolean,
+        newDirectiveClassId: String,
     ) {
         loadState(
             newTestDataFiles.map { it.path }.toTypedArray(),
@@ -97,6 +108,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
             ),
             newIgnoredLanguagesForInjection.toTypedArray(),
             newMultifilePartsSeparator,
+            newDirectiveClassId,
         )
     }
 
@@ -107,6 +119,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newTestTags: Map<String, Array<String>>,
         newIgnoredLanguagesForInjection: Array<String>,
         newMultifilePartsSeparator: Boolean,
+        newDirectiveClassId: String,
     ) {
         testDataFiles = newTestDataFiles.copyOf()
         testDataDirectories = newTestDataDirectories.copyOf()
@@ -114,6 +127,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         testTags = newTestTags.toMap()
         ignoredLanguagesForInjection = newIgnoredLanguagesForInjection.copyOf()
         multifilePartsSeparator = newMultifilePartsSeparator
+        directiveClassId = newDirectiveClassId
     }
 
     /**
@@ -183,6 +197,7 @@ class TestDataPathsConfigurable(private val project: Project) :
         testTags = resetTestTags(),
         ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection(),
         multifilePartsSeparator = resetMultifilePartsSeparator(),
+        directiveClassId = resetDirectiveClassId(),
     )
 
     private var testDataFiles: MutableList<VirtualFile>
@@ -208,6 +223,10 @@ class TestDataPathsConfigurable(private val project: Project) :
     private var multifilePartsSeparator: Boolean
         get() = state.multifilePartsSeparator
         set(value) { state.multifilePartsSeparator = value }
+
+    private var directiveClassId: String
+        get() = state.directiveClassId
+        set(value) { state.directiveClassId = value }
 
     // -------------------------------- state initialization --------------------------------
 
@@ -235,6 +254,10 @@ class TestDataPathsConfigurable(private val project: Project) :
 
     private fun resetMultifilePartsSeparator(): Boolean {
         return configuration.multifilePartsSeparator
+    }
+
+    private fun resetDirectiveClassId(): String {
+        return configuration.directiveClassId
     }
 
     // -------------------------------- panels --------------------------------
@@ -267,6 +290,24 @@ class TestDataPathsConfigurable(private val project: Project) :
         }
     }
 
+    private val directiveClassIdField: JBTextField by lazy {
+        JBTextField(state.directiveClassId).apply {
+            document.addDocumentListener(object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent?) {
+                    state.directiveClassId = text.trim()
+                }
+
+                override fun removeUpdate(e: DocumentEvent?) {
+                    state.directiveClassId = text.trim()
+                }
+
+                override fun changedUpdate(e: DocumentEvent?) {
+                    state.directiveClassId = text.trim()
+                }
+            })
+        }
+    }
+
     override fun createPanel(): DialogPanel {
         fun Panel.panelRow(title: String, panel: PanelWithButtons) {
             row(title) {}
@@ -284,6 +325,9 @@ class TestDataPathsConfigurable(private val project: Project) :
             panelRow("Ignored injected languages:", ignoredLanguagesForInjectionPanel)
             row {
                 cell(multifilePartsSeparatorCheckbox)
+            }
+            row("Directive class id:") {
+                cell(directiveClassIdField).align(AlignX.FILL)
             }
         }
     }
@@ -327,13 +371,18 @@ class TestDataPathsConfigurable(private val project: Project) :
         return configuration.multifilePartsSeparator != multifilePartsSeparator
     }
 
+    private fun directiveClassIdModified(): Boolean {
+        return configuration.directiveClassId != directiveClassId
+    }
+
     override fun isModified(): Boolean {
         return testDataModified(isFiles = true) ||
             testDataModified(isFiles = false) ||
             relatedFilesSearchPathsModified() ||
             testTagsModified() ||
             ignoredLanguagesForInjectionModified() ||
-            multifilePartsSeparatorModified()
+            multifilePartsSeparatorModified() ||
+            directiveClassIdModified()
     }
 
     override fun reset() {
@@ -344,7 +393,9 @@ class TestDataPathsConfigurable(private val project: Project) :
         testTags = resetTestTags()
         ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection()
         multifilePartsSeparator = resetMultifilePartsSeparator()
+        directiveClassId = resetDirectiveClassId()
         multifilePartsSeparatorCheckbox.isSelected = multifilePartsSeparator
+        directiveClassIdField.text = directiveClassId
         (testDataFilesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (testDataDirectoriesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (relatedFilesSearchPathsPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
@@ -361,6 +412,7 @@ class TestDataPathsConfigurable(private val project: Project) :
             testTags,
             ignoredLanguagesForInjection,
             multifilePartsSeparator,
+            directiveClassId,
         )
     }
 }

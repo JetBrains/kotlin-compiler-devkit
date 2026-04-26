@@ -14,9 +14,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtDeclarationWithReturnType
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
-
-private val DIRECTIVE_CLASS_ID =
-    ClassId.topLevel(FqName("org.jetbrains.kotlin.test.directives.model.Directive"))
+import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 
 class TestDirectiveReference(
     element: PsiElement,
@@ -26,8 +24,8 @@ class TestDirectiveReference(
 
     override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
         val project = myElement.project
-        return resolvePreferringProjectScope(project) {
-            val declarations = KotlinPropertyShortNameIndex.Helper[key, project, it]
+        return resolvePreferringProjectScope(project) { scope ->
+            val declarations = KotlinPropertyShortNameIndex.Helper[key, project, scope]
             declarations.filter { it.isDirective() }
         }.map { PsiElementResolveResult(it) }
             .toTypedArray()
@@ -41,11 +39,18 @@ class TestDirectiveReference(
 }
 
 fun KtNamedDeclaration.isDirective(): Boolean {
-    if (this !is KtDeclarationWithReturnType) return false
-    return analyze(this) {
-        returnType.isSubtypeOf(DIRECTIVE_CLASS_ID)
+    val directiveClassId = TestDataPathsConfiguration.getInstance(project).directiveClassId
+        .takeIf(String::isNotBlank)
+        ?.let(::runCatchingClassId)
+        ?: return false
+
+    return this is KtDeclarationWithReturnType && analyze(this) {
+        returnType.isSubtypeOf(directiveClassId)
     }
 }
+
+private fun runCatchingClassId(fqName: String): ClassId? =
+    runCatching { ClassId.topLevel(FqName(fqName)) }.getOrNull()
 
 fun <T : PsiElement> resolvePreferringProjectScope(project: Project, resolve: (GlobalSearchScope) -> List<T>): List<T> {
     return resolve(GlobalSearchScope.projectScope(project))
