@@ -38,13 +38,15 @@ enum class TestDataType {
     RelatedFile,
 }
 
+fun VirtualFile.isSupportedByExtension(): Boolean = extension in supportedExtensions
+
 fun VirtualFile?.getTestDataType(project: Project): TestDataType? {
     if (this == null) return null
     val configuration = TestDataPathsConfiguration.getInstance(project)
     if (configuration.testDataDirectories.any { path.startsWith(it) }) return TestDataType.Directory
     if (configuration.testDataFiles.any { path.startsWith(it) }) {
         return when {
-            extension in supportedExtensions -> TestDataType.File
+            isSupportedByExtension() -> TestDataType.File
             isDirectory -> TestDataType.DirectoryOfFiles
             supportedExtensions.any { parent?.findChild("$nameWithoutAllExtensions.$it") != null } -> TestDataType.RelatedFile
             else -> null
