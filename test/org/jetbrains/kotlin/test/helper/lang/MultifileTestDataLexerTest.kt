@@ -113,11 +113,13 @@ class MultifileTestDataLexerTest {
     }
 
     @Test
-    fun `treats module header inside content as plain text when no file follows`() {
+    fun `splits on module header inside content when no file follows`() {
         assertEquals(
             listOf(
                 "MULTIFILE_FILE_LINE:// FILE: sample.kt\\n",
-                "MULTIFILE_TEXT_BLOCK:fun example() {\\n// MODULE: not-structural\\nprintln(42)\\n}",
+                "MULTIFILE_TEXT_BLOCK:fun example() {\\n",
+                "MULTIFILE_MODULE_LINE:// MODULE: not-structural\\n",
+                "MULTIFILE_TEXT_BLOCK:println(42)\\n}",
             ),
             tokenize(
                 """
@@ -126,6 +128,50 @@ class MultifileTestDataLexerTest {
                 // MODULE: not-structural
                 println(42)
                 }
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
+    fun `splits module only entries without file directives`() {
+        assertEquals(
+            listOf(
+                "MULTIFILE_MODULE_LINE:// MODULE: x\\n",
+                "MULTIFILE_TEXT_BLOCK:aaa\\n\\n",
+                "MULTIFILE_MODULE_LINE:// MODULE: y\\n",
+                "MULTIFILE_TEXT_BLOCK:bbb",
+            ),
+            tokenize(
+                """
+                // MODULE: x
+                aaa
+                
+                // MODULE: y
+                bbb
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
+    fun `supports module only and module plus file transitions`() {
+        assertEquals(
+            listOf(
+                "MULTIFILE_MODULE_LINE:// MODULE: x\\n",
+                "MULTIFILE_TEXT_BLOCK:aaa\\n\\n",
+                "MULTIFILE_MODULE_LINE:// MODULE: y\\n",
+                "MULTIFILE_FILE_LINE:// FILE: b.kt\\n",
+                "MULTIFILE_TEXT_BLOCK:bbb",
+            ),
+            tokenize(
+                """
+                // MODULE: x
+                aaa
+                
+                // MODULE: y
+                // FILE: b.kt
+                bbb
                 """.trimIndent(),
             ),
         )

@@ -11,11 +11,12 @@ class MultifileTestDataParser : PsiParser {
         builder: PsiBuilder,
     ): ASTNode {
         val rootMarker = builder.mark()
+        val hasStructuralDirectives = hasStructuralDirectives(builder.originalText)
 
-        parsePreamble(builder)
+        parsePreamble(builder, hasStructuralDirectives)
 
         while (!builder.eof()) {
-            if (!parseEntry(builder)) {
+            if (!parseEntry(builder, hasStructuralDirectives)) {
                 val invalid = builder.mark()
                 builder.advanceLexer()
                 invalid.error("Unexpected multifile test data token")
@@ -26,15 +27,39 @@ class MultifileTestDataParser : PsiParser {
         return builder.treeBuilt
     }
 
-    private fun parsePreamble(builder: PsiBuilder) {
-        if (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
+    private fun parsePreamble(
+        builder: PsiBuilder,
+        hasStructuralDirectives: Boolean,
+    ) {
+        if (hasStructuralDirectives && builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
             val preamble = builder.mark()
             parseBlockBody(builder)
+            preamble.done(MULTIFILE_PREAMBLE)
+            return
+        }
+
+        if (!hasStructuralDirectives && (builder.tokenType == MULTIFILE_NEW_LINE || builder.tokenType == MULTIFILE_COMMENT_LINE)) {
+            val preamble = builder.mark()
+            while (builder.tokenType == MULTIFILE_NEW_LINE || builder.tokenType == MULTIFILE_COMMENT_LINE) {
+                builder.advanceLexer()
+            }
             preamble.done(MULTIFILE_PREAMBLE)
         }
     }
 
-    private fun parseEntry(builder: PsiBuilder): Boolean {
+    private fun parseEntry(
+        builder: PsiBuilder,
+        hasStructuralDirectives: Boolean,
+    ): Boolean {
+        if (!hasStructuralDirectives) {
+            val entry = builder.mark()
+            val content = builder.mark()
+            parseBlockBody(builder)
+            content.done(MULTIFILE_FILE_CONTENT)
+            entry.done(MULTIFILE_ENTRY)
+            return true
+        }
+
         if (builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
             return false
         }
@@ -55,10 +80,6 @@ class MultifileTestDataParser : PsiParser {
             val fileHeader = builder.mark()
             builder.advanceLexer()
             fileHeader.done(MULTIFILE_FILE_HEADER)
-        } else {
-            builder.error("Expected // FILE: directive")
-            entry.done(MULTIFILE_ENTRY)
-            return true
         }
 
         if (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
@@ -71,6 +92,10 @@ class MultifileTestDataParser : PsiParser {
         return true
     }
 
+    private fun hasStructuralDirectives(text: CharSequence): Boolean {
+        return text.lineSequence().any { it.contains(STRUCTURAL_DIRECTIVE_REGEX) }
+    }
+
     private fun parseBlockBody(builder: PsiBuilder) {
         while (builder.tokenType != null && builder.tokenType != MULTIFILE_MODULE_LINE && builder.tokenType != MULTIFILE_FILE_LINE) {
             if (builder.tokenType == MULTIFILE_TEXT_BLOCK) {
@@ -81,5 +106,9 @@ class MultifileTestDataParser : PsiParser {
             }
             builder.advanceLexer()
         }
+    }
+
+    companion object {
+        private val STRUCTURAL_DIRECTIVE_REGEX = """^//\s*(?:FILE|MODULE)""".toRegex()
     }
 }
