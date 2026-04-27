@@ -52,7 +52,8 @@ fun VirtualFile.getTestDataType(project: Project): TestDataType? {
     return null
 }
 
-fun VirtualFile.isTestDataFile(project: Project): Boolean {
+fun VirtualFile?.isTestDataFile(project: Project): Boolean {
+    if (this == null) return false
     return getTestDataType(project) != null
 }
 

@@ -10,6 +10,7 @@ import com.intellij.psi.impl.source.tree.PsiCommentImpl
 import org.jetbrains.annotations.Unmodifiable
 import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
+import org.jetbrains.kotlin.test.helper.isTestDataFile
 import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataFileContent
 import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataTextBlock
 import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
@@ -22,8 +23,9 @@ class MultifileTestDataMultiHostInjector: MultiHostInjector {
         registrar: MultiHostRegistrar,
         context: PsiElement
     ) {
-        if (context is PsiCommentImpl) {
+        if (context is PsiCommentImpl && context.containingFile.virtualFile.isTestDataFile(context.project)) {
             injectCommentsAsKotlin(registrar, context)
+            return
         }
 
         val textBlock = (context as? MultifileTestDataTextBlock)?.takeIf { it.textLength != 0 } ?: return
