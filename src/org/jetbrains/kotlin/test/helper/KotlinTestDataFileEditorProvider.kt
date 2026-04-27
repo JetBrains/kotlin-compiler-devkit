@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.test.helper.ui.TestDataEditor
 
 class KotlinTestDataFileEditorProvider: AsyncFileEditorProvider, DumbAware {
     override fun accept(project: Project, file: VirtualFile): Boolean {
-        return file.getTestDataType(project) != null
+        return file.isTestDataFile(project)
     }
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor {

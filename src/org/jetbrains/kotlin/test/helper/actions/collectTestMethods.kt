@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.idea.base.util.parentsWithSelf
 import org.jetbrains.kotlin.test.helper.TestDataType
 import org.jetbrains.kotlin.test.helper.asPathWithoutAllExtensions
 import org.jetbrains.kotlin.test.helper.getTestDataType
+import org.jetbrains.kotlin.test.helper.isTestDataFile
 import org.jetbrains.kotlin.test.helper.nameWithoutAllExtensions
 import java.io.File
 import kotlin.contracts.ExperimentalContracts
@@ -55,7 +56,7 @@ fun VirtualFile.collectTestDescriptions(
     if (existing.none { (it.psi as? PsiClass)?.parent is PsiFile }) {
         parentsWithSelf
             .drop(1)
-            .takeWhile { it.getTestDataType(project) != null }
+            .takeWhile { it.isTestDataFile(project) }
             .firstNotNullOfOrNull { parent ->
                 parent.collectTestMethodsIfTestData(project)
                     .mapNotNull {

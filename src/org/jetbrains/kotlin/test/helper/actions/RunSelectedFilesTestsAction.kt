@@ -4,6 +4,7 @@ import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.components.service
 import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.gradle.isGradleEnabled
+import org.jetbrains.kotlin.test.helper.isTestDataFile
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 
 class RunSelectedFilesGroup : DefaultActionGroup() {
@@ -34,7 +35,7 @@ val AnActionEvent.hasSelectedTestDataFiles: Boolean
     get() {
         val project = project ?: return false
         val selectedFiles = getData(CommonDataKeys.VIRTUAL_FILE_ARRAY) ?: emptyArray()
-        return selectedFiles.any { it.getTestDataType(project) != null } && project.isGradleEnabled()
+        return selectedFiles.any { it.isTestDataFile(project) } && project.isGradleEnabled()
     }
 
 private fun AnActionEvent.updateRunSelectedPresentation() {

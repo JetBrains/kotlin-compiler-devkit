@@ -52,6 +52,10 @@ fun VirtualFile.getTestDataType(project: Project): TestDataType? {
     return null
 }
 
+fun VirtualFile.isTestDataFile(project: Project): Boolean {
+    return getTestDataType(project) != null
+}
+
 val String.asPathWithoutAllExtensions: String
     get() {
         val separatorLastIndex = lastIndexOf(File.separatorChar)
@@ -87,7 +91,7 @@ fun AnActionEvent.toFileNamesString(): String? {
 
 fun List<VirtualFile>.toFileNamesString(project: Project): String {
     return this
-        .filter { it.getTestDataType(project) != null }
+        .filter { it.isTestDataFile(project) }
         .map { it.nameWithoutAllExtensions }
         .distinct()
         .joinToString(separator = ", ")

@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.asPathWithoutAllExtensions
 import org.jetbrains.kotlin.test.helper.getRelatedTestFiles
 import org.jetbrains.kotlin.test.helper.getTestDataType
+import org.jetbrains.kotlin.test.helper.isTestDataFile
 
 val RENAME_KEY = Key.create<Boolean>("org.kotlin.test.helper.renaming")
 
@@ -25,7 +26,7 @@ class RelatedFileRenameListener : BulkFileListener {
                 if (event.oldValue !is String || event.newValue !is String) return@flatMap emptyList()
                 if (event.file.getUserData(RENAME_KEY) != null) return@flatMap emptyList()
                 val project = event.file.findProject() ?: return@flatMap emptyList()
-                if (event.file.getTestDataType(project) == null) return@flatMap emptyList()
+                if (!event.file.isTestDataFile(project)) return@flatMap emptyList()
 
                 event.file.getRelatedTestFiles(project).filterNot { it == event.file }
                     .map { Pair(it, (event.newValue as String).asPathWithoutAllExtensions) }

@@ -6,6 +6,7 @@ import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.*
 import com.intellij.util.ProcessingContext
 import org.jetbrains.kotlin.test.helper.getTestDataType
+import org.jetbrains.kotlin.test.helper.isTestDataFile
 
 class DirectiveReferenceContributor : PsiReferenceContributor() {
     private val regex = Regex("// ([A-Z0-9_]+)(:.*)?")
@@ -21,7 +22,7 @@ class DirectiveReferenceContributor : PsiReferenceContributor() {
                 ): Array<PsiReference> {
                     element.containingFile?.virtualFile
                         ?.let { (it as? VirtualFileWindow)?.delegate ?: it }
-                        ?.takeIf { it.getTestDataType(element.project) != null }
+                        ?.takeIf { it.isTestDataFile(element.project) }
                         ?: return PsiReference.EMPTY_ARRAY
 
                     val text = element.text
