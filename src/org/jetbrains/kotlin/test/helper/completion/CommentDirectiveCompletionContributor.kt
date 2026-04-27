@@ -18,17 +18,21 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.util.ProcessingContext
 import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.idea.completion.or
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.test.helper.lang.MULTIFILE_COMMENT_LINE
 import org.jetbrains.kotlin.test.helper.reference.getEnumClassesByDirective
 import org.jetbrains.kotlin.test.helper.reference.getLanguageFeatureClasses
 import org.jetbrains.kotlin.test.helper.reference.isDirective
 
 class CommentDirectiveCompletionContributor : CompletionContributor() {
     init {
+        val ktComment = PlatformPatterns.psiElement().withElementType(KtTokens.EOL_COMMENT)
+        val multifileComment = PlatformPatterns.psiElement().withElementType(MULTIFILE_COMMENT_LINE)
         extend(
             CompletionType.BASIC,
-            PlatformPatterns.psiElement().withElementType(KtTokens.EOL_COMMENT),
+            ktComment or multifileComment,
             CommentDirectiveCompletionProvider()
         )
     }
