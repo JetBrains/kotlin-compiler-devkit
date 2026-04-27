@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.test.helper.codeinsight
 
 import com.intellij.lang.injection.MultiHostInjector
 import com.intellij.lang.injection.MultiHostRegistrar
+import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
@@ -30,7 +31,7 @@ class MultifileTestDataMultiHostInjector: MultiHostInjector {
 
         val textBlock = (context as? MultifileTestDataTextBlock)?.takeIf { it.textLength != 0 } ?: return
         val language = when {
-            textBlock.fileContent != null -> textBlock.fileContent?.entry?.fileHeader?.injectedLanguage
+            textBlock.fileContent != null -> textBlock.fileContent?.entry?.fileHeader?.injectedLanguage?.takeUnless { it == PlainTextLanguage.INSTANCE }
             textBlock.preamble != null -> KotlinLanguage.INSTANCE
             else -> null
         } ?: return
