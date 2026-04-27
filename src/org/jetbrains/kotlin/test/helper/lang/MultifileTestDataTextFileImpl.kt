@@ -15,16 +15,16 @@ import com.intellij.psi.util.PsiTreeUtil
  * Root PSI file for Kotlin multifile test data.
  *
  * Structure:
- * - optional [MultifileTestDataPreamble] containing top-level comments, blank lines, or plain text
+ * - optional [MultifileTestDataPreamble] containing top-level comments and blank lines
  * - zero or more [MultifileTestDataEntry] blocks
  *
  * Each [MultifileTestDataEntry] contains:
  * - optional [MultifileTestDataModuleHeader]
- * - required [MultifileTestDataFileHeader]
+ * - optional [MultifileTestDataFileHeader] (required for explicit multifile entries)
  * - optional [MultifileTestDataFileContent]
  *
- * The top-level preamble is intentionally shaped like a content block so files without any `// FILE:`
- * separators can still be represented as a single Kotlin-like text body.
+ * When no `// FILE:` or structural `// MODULE:` directives are present, the parser creates
+ * one implicit [MultifileTestDataEntry] from the non-comment body after the preamble.
  */
 class MultifileTestDataTextFileImpl(viewProvider: FileViewProvider) :
     PsiFileImpl(MULTIFILE_TEXT_FILE, MULTIFILE_TEXT_FILE, viewProvider),

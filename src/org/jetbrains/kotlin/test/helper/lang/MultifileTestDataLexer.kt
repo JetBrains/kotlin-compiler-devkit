@@ -59,7 +59,7 @@ class MultifileTestDataLexer : LexerBase() {
 
     private fun locateBeforeFirstEntry() {
         when {
-            isStructuralModuleHeaderAt(tokenStart) -> setToken(MULTIFILE_MODULE_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
+            isModuleHeaderAt(tokenStart) -> setToken(MULTIFILE_MODULE_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
             isFileHeaderAt(tokenStart) -> setToken(MULTIFILE_FILE_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
             isBlankLine(tokenStart) -> setToken(MULTIFILE_NEW_LINE, lineEnd(tokenStart), BEFORE_FIRST_ENTRY)
             isCommentLine(tokenStart) -> setToken(MULTIFILE_COMMENT_LINE, lineEnd(tokenStart), BEFORE_FIRST_ENTRY)
@@ -78,7 +78,7 @@ class MultifileTestDataLexer : LexerBase() {
 
     private fun locateAfterFileHeader() {
         when {
-            isStructuralModuleHeaderAt(tokenStart) -> setToken(MULTIFILE_MODULE_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
+            isModuleHeaderAt(tokenStart) -> setToken(MULTIFILE_MODULE_LINE, lineEnd(tokenStart), AFTER_MODULE_HEADER)
             isFileHeaderAt(tokenStart) -> setToken(MULTIFILE_FILE_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
             isBlankLine(tokenStart) -> setToken(MULTIFILE_NEW_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
             isCommentLine(tokenStart) -> setToken(MULTIFILE_COMMENT_LINE, lineEnd(tokenStart), AFTER_FILE_HEADER)
@@ -96,23 +96,12 @@ class MultifileTestDataLexer : LexerBase() {
         state = newState
     }
 
-    private fun isStructuralModuleHeaderAt(offset: Int): Boolean {
-        if (!isDirectiveLine(offset, "MODULE")) {
-            return false
-        }
-
-        var nextOffset = lineEnd(offset)
-        while (nextOffset < endOffset && isBlankLine(nextOffset)) {
-            nextOffset = lineEnd(nextOffset)
-        }
-
-        return nextOffset < endOffset && isFileHeaderAt(nextOffset)
-    }
+    private fun isModuleHeaderAt(offset: Int): Boolean = isDirectiveLine(offset, "MODULE")
 
     private fun nextTextBlockEnd(offset: Int): Int {
         var cursor = offset
         while (cursor < endOffset) {
-            if (isStructuralModuleHeaderAt(cursor) || isFileHeaderAt(cursor)) {
+            if (isModuleHeaderAt(cursor) || isFileHeaderAt(cursor)) {
                 return cursor
             }
             cursor = lineEnd(cursor)
@@ -123,7 +112,7 @@ class MultifileTestDataLexer : LexerBase() {
     private fun isFileHeaderAt(offset: Int): Boolean = isDirectiveLine(offset, "FILE")
 
     private fun isCommentLine(offset: Int): Boolean =
-        startsWithDoubleSlash(offset) && !isFileHeaderAt(offset) && !isStructuralModuleHeaderAt(offset)
+        startsWithDoubleSlash(offset) && !isFileHeaderAt(offset) && !isModuleHeaderAt(offset)
 
     private fun isDirectiveLine(
         offset: Int,
