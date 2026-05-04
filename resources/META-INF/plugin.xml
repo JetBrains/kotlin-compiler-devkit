@@ -158,21 +158,21 @@
                     id="TestDataManagerUpdateAllTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateAction"
                     text="Update Test Data"
-                    description="Runs :manageTestDataGlobally with update mode for selected files"
+                    description="Updates test data for the selected files using :updateTestData when available, otherwise falls back to :manageTestDataGlobally with update mode"
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action
                     id="TestDataManagerUpdateGoldenTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateGoldenAction"
                     text="Update Test Data (Golden Only)"
-                    description="Runs :manageTestDataGlobally with update mode for selected golden files"
+                    description="Updates only the golden test data for the selected files using :updateTestData when available, otherwise falls back to :manageTestDataGlobally with update mode"
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action
                     id="TestDataManagerUpdateIncrementalAction"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateIncrementalAction"
                     text="Update Test Data (Incremental)"
-                    description="Runs :manageTestDataGlobally with update mode for selected files. Runs alternative tests only if the golden one had changes"
+                    description="Updates test data for the selected files; alternative tests run only if the golden one had changes. Uses :updateTestData when available, otherwise falls back to :manageTestDataGlobally with update mode"
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action

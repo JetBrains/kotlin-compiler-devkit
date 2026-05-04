@@ -6,7 +6,21 @@ enum class TestDataManagerMode(val cliValue: String) {
 }
 
 /**
- * Represents a command for the `manageTestDataGlobally` gradle task.
+ * Property prefix used by the `updateTestData` task to receive options.
+ *
+ * Defined in the Kotlin repo at `repo/gradle-build-conventions/test-data-manager-convention/src/main/kotlin/TestDataManagerConstants.kt`.
+ */
+private const val UPDATE_OPTIONS_PREFIX = "org.jetbrains.kotlin.testDataManager.options"
+
+/**
+ * Builds a Gradle command for either `manageTestDataGlobally` (the default) or `updateTestData`
+ * (when [updateTestDataIsAvailable] is `true` and [mode] is [TestDataManagerMode.UPDATE]).
+ *
+ * `updateTestData` is a configuration-cache-friendly alternative to
+ * `manageTestDataGlobally --mode=update`: its options are passed as `-P` Gradle properties read
+ * at execution time, so changing values between runs does not invalidate Gradle's configuration
+ * cache. The task only handles the update mode, so it is selected only for
+ * [TestDataManagerMode.UPDATE]; other modes always fall back to `manageTestDataGlobally`.
  *
  * See `repo/gradle-build-conventions/test-data-manager-convention` in the Kotlin repo for more details.
  */
@@ -17,24 +31,65 @@ class TestDataManagerCommandBuilder {
     var goldenOnly: Boolean? = null
     var incremental: Boolean? = false
 
-    fun build(): String = buildString {
-        append("manageTestDataGlobally")
-        mode?.let { append(" --mode=${it.cliValue}") }
-        if (testDataPaths.isNotEmpty()) {
-            append(" --test-data-path=${testDataPaths.joinToString(",")}")
-        }
+    /**
+     * Whether the linked Gradle project ships the dedicated `updateTestData` task. When `true`
+     * and [mode] is [TestDataManagerMode.UPDATE], the builder emits `updateTestData` with `-P`
+     * properties; otherwise it emits `manageTestDataGlobally` with `--option` CLI flags.
+     */
+    var updateTestDataIsAvailable: Boolean = false
 
-        testClassPattern?.let { append(" --test-class-pattern=$it") }
-        goldenOnly?.let { if (it) append(" --golden-only") }
-        incremental?.let { if (it) append(" --incremental") }
+    private val isUpdateTask: Boolean
+        get() = updateTestDataIsAvailable && mode == TestDataManagerMode.UPDATE
+
+    fun build(): String = buildString {
+        append(buildTaskPart())
+        appendOption(
+            cliKey = "test-data-path",
+            propKey = "testDataPath",
+            value = testDataPaths.takeIf { it.isNotEmpty() }?.joinToString(","),
+        )
+
+        appendOption(cliKey = "test-class-pattern", propKey = "testClassPattern", value = testClassPattern)
+        appendBooleanFlag(cliKey = "golden-only", propKey = "goldenOnly", value = goldenOnly)
+        appendBooleanFlag(cliKey = "incremental", propKey = "incremental", value = incremental)
         append(" --continue")
     }
 
+    private fun buildTaskPart(): String =
+        if (isUpdateTask) {
+            "updateTestData"
+        } else {
+            buildString {
+                append("manageTestDataGlobally")
+                mode?.let { append(" --mode=${it.cliValue}") }
+            }
+        }
+
+    private fun StringBuilder.appendOption(cliKey: String, propKey: String, value: String?) {
+        if (value == null) return
+        append(' ')
+        if (isUpdateTask) {
+            append("-P$UPDATE_OPTIONS_PREFIX.$propKey=$value")
+        } else {
+            append("--$cliKey=$value")
+        }
+    }
+
+    private fun StringBuilder.appendBooleanFlag(cliKey: String, propKey: String, value: Boolean?) {
+        if (value != true) return
+        append(' ')
+        if (isUpdateTask) {
+            append("-P$UPDATE_OPTIONS_PREFIX.$propKey=true")
+        } else {
+            append("--$cliKey")
+        }
+    }
+
     fun asTitle(): String = buildString {
-        when (mode) {
-            TestDataManagerMode.CHECK -> append("Check")
-            TestDataManagerMode.UPDATE -> append("Update")
-            null -> append("Manage")
+        when {
+            isUpdateTask || mode == TestDataManagerMode.UPDATE -> append("Update")
+            mode == TestDataManagerMode.CHECK -> append("Check")
+            else -> append("Manage")
         }
 
         append(" Test Data")
@@ -53,6 +108,9 @@ class TestDataManagerCommandBuilder {
     }
 }
 
-fun buildTestDataManagerCommand(configure: TestDataManagerCommandBuilder.() -> Unit = {}): String {
-    return TestDataManagerCommandBuilder().apply(configure).build()
-}
+fun buildTestDataManagerCommand(
+    updateTestDataIsAvailable: Boolean = false,
+    configure: TestDataManagerCommandBuilder.() -> Unit = {},
+): String = TestDataManagerCommandBuilder().apply {
+    this.updateTestDataIsAvailable = updateTestDataIsAvailable
+}.apply(configure).build()

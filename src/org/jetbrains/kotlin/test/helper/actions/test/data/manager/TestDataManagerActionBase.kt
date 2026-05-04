@@ -29,12 +29,15 @@ class TestDataManagerGroup : DefaultActionGroup() {
  */
 abstract class TestDataManagerActionBase : RunSelectedFilesActionBase() {
     protected fun runTestDataManager(project: Project, configure: TestDataManagerCommandBuilder.() -> Unit = {}) {
-        val builder = TestDataManagerCommandBuilder().apply(configure)
-        val command = builder.build()
+        val builder = TestDataManagerCommandBuilder().apply {
+            updateTestDataIsAvailable = project.hasUpdateTestDataTask
+            configure()
+        }
+
         runGradleCommandLine(
             project = project,
             config = GradleRunConfig(
-                commandLine = command,
+                commandLine = builder.build(),
                 title = builder.asTitle(),
                 debug = isDebug,
                 useProjectBasePath = true,
@@ -46,6 +49,9 @@ abstract class TestDataManagerActionBase : RunSelectedFilesActionBase() {
 
 val Project.hasManageTestDataGloballyTask: Boolean
     get() = hasGradleTask("manageTestDataGlobally")
+
+val Project.hasUpdateTestDataTask: Boolean
+    get() = hasGradleTask("updateTestData")
 
 /**
  * The list of selected test data paths for the action.
