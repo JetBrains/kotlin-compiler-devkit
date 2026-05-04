@@ -34,6 +34,7 @@ class PluginSettingsState(
     var testTags: MutableList<Pair<String, List<String>>>,
     var ignoredLanguagesForInjection: MutableList<String>,
     var multifilePartsSeparator: Boolean,
+    var injectMultifileTestDataFileType: Boolean,
     var directiveClassId: String,
 )
 
@@ -187,6 +188,7 @@ class TestDataPathsConfigurable(private val project: Project) :
     BoundConfigurable(MyBundle.message("pluginSettingsDisplayName"), "Tools.KotlinTestDataPluginSettings") {
 
     private val configuration: TestDataPathsConfiguration = TestDataPathsConfiguration.getInstance(project)
+    private val workspaceConfiguration: TestDataWorkspaceConfiguration = TestDataWorkspaceConfiguration.getInstance(project)
 
     // -------------------------------- state --------------------------------
 
@@ -197,6 +199,7 @@ class TestDataPathsConfigurable(private val project: Project) :
         testTags = resetTestTags(),
         ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection(),
         multifilePartsSeparator = resetMultifilePartsSeparator(),
+        injectMultifileTestDataFileType = resetInjectMultifileTestDataFileType(),
         directiveClassId = resetDirectiveClassId(),
     )
 
@@ -223,6 +226,10 @@ class TestDataPathsConfigurable(private val project: Project) :
     private var multifilePartsSeparator: Boolean
         get() = state.multifilePartsSeparator
         set(value) { state.multifilePartsSeparator = value }
+
+    private var injectMultifileTestDataFileType: Boolean
+        get() = state.injectMultifileTestDataFileType
+        set(value) { state.injectMultifileTestDataFileType = value }
 
     private var directiveClassId: String
         get() = state.directiveClassId
@@ -256,6 +263,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         return configuration.multifilePartsSeparator
     }
 
+    private fun resetInjectMultifileTestDataFileType(): Boolean {
+        return workspaceConfiguration.injectMultifileTestDataFileType
+    }
+
     private fun resetDirectiveClassId(): String {
         return configuration.directiveClassId
     }
@@ -286,6 +297,14 @@ class TestDataPathsConfigurable(private val project: Project) :
         JBCheckBox("Show separators between multifile test data parts", state.multifilePartsSeparator).apply {
             addChangeListener {
                 state.multifilePartsSeparator = isSelected
+            }
+        }
+    }
+
+    private val injectMultifileTestDataFileTypeCheckbox: JBCheckBox by lazy {
+        JBCheckBox("Inject multifile test data file type in test data files", state.injectMultifileTestDataFileType).apply {
+            addChangeListener {
+                state.injectMultifileTestDataFileType = isSelected
             }
         }
     }
@@ -325,6 +344,9 @@ class TestDataPathsConfigurable(private val project: Project) :
             panelRow("Ignored injected languages:", ignoredLanguagesForInjectionPanel)
             row {
                 cell(multifilePartsSeparatorCheckbox)
+            }
+            row {
+                cell(injectMultifileTestDataFileTypeCheckbox)
             }
             row("Directive class id:") {
                 cell(directiveClassIdField).align(AlignX.FILL)
@@ -371,6 +393,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         return configuration.multifilePartsSeparator != multifilePartsSeparator
     }
 
+    private fun injectMultifileTestDataFileTypeModified(): Boolean {
+        return workspaceConfiguration.injectMultifileTestDataFileType != injectMultifileTestDataFileType
+    }
+
     private fun directiveClassIdModified(): Boolean {
         return configuration.directiveClassId != directiveClassId
     }
@@ -382,6 +408,7 @@ class TestDataPathsConfigurable(private val project: Project) :
             testTagsModified() ||
             ignoredLanguagesForInjectionModified() ||
             multifilePartsSeparatorModified() ||
+            injectMultifileTestDataFileTypeModified() ||
             directiveClassIdModified()
     }
 
@@ -393,8 +420,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         testTags = resetTestTags()
         ignoredLanguagesForInjection = resetIgnoredLanguagesForInjection()
         multifilePartsSeparator = resetMultifilePartsSeparator()
+        injectMultifileTestDataFileType = resetInjectMultifileTestDataFileType()
         directiveClassId = resetDirectiveClassId()
         multifilePartsSeparatorCheckbox.isSelected = multifilePartsSeparator
+        injectMultifileTestDataFileTypeCheckbox.isSelected = injectMultifileTestDataFileType
         directiveClassIdField.text = directiveClassId
         (testDataFilesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (testDataDirectoriesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
@@ -414,5 +443,6 @@ class TestDataPathsConfigurable(private val project: Project) :
             multifilePartsSeparator,
             directiveClassId,
         )
+        workspaceConfiguration.injectMultifileTestDataFileType = injectMultifileTestDataFileType
     }
 }
