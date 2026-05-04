@@ -79,24 +79,29 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                     object : AnAction("Run", null, AllIcons.Actions.Execute) {
                         override fun actionPerformed(e: AnActionEvent) {
                             state.executeRunConfigAction(e, index, debug = false)
-                            selectionChanged(item)
+                            setSelectionAndRefresh(item)
                         }
                     },
                     object : AnAction("Debug", null, AllIcons.Actions.StartDebugger) {
                         override fun actionPerformed(e: AnActionEvent) {
                             state.executeRunConfigAction(e, index, debug = true)
-                            selectionChanged(item)
+                            setSelectionAndRefresh(item)
                         }
                     },
                     object : AnAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts) {
                         override fun actionPerformed(e: AnActionEvent) {
                             runAndApply(e, item)
-                            selectionChanged(item)
+                            setSelectionAndRefresh(item)
                         }
                     }
                 )
             )
         }
+    }
+
+    fun setSelectionAndRefresh(item: String?) {
+        selection = item
+        selectionChanged(item)
     }
 
     override fun selectionChanged(item: String?): Boolean {
