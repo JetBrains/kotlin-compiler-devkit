@@ -112,30 +112,34 @@ class TestDataRunnerService(
             }
         }
 
-        val selected = withContext(Dispatchers.EDT) {
-            suspendCancellableCoroutine<Set<String>?> { continuation ->
-                val popup = JBPopupFactory.getInstance()
-                    .createPopupChooserBuilder(byClass.keys.sortedBy { it })
-                    .setTitle("Select Test Class")
-                    .setItemsChosenCallback { selected ->
-                        continuation.resume(selected)
-                    }
-                    .addListener(object: JBPopupListener {
-                        override fun onClosed(event: LightweightWindowEvent) {
-                            if (!event.isOk) {
-                                continuation.resume(null)
-                            }
+        val selected = if (byClass.size == 1) {
+            byClass.keys
+        } else {
+            withContext(Dispatchers.EDT) {
+                suspendCancellableCoroutine { continuation ->
+                    val popup = JBPopupFactory.getInstance()
+                        .createPopupChooserBuilder(byClass.keys.sortedBy { it })
+                        .setTitle("Select Test Class")
+                        .setItemsChosenCallback { selected ->
+                            continuation.resume(selected)
                         }
-                    })
-                    .setNamerForFiltering { it }
-                    .setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION)
-                    .createPopup()
+                        .addListener(object: JBPopupListener {
+                            override fun onClosed(event: LightweightWindowEvent) {
+                                if (!event.isOk) {
+                                    continuation.resume(null)
+                                }
+                            }
+                        })
+                        .setNamerForFiltering { it }
+                        .setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION)
+                        .createPopup()
 
-                popup.showInBestPositionFor(e.dataContext)
+                    popup.showInBestPositionFor(e.dataContext)
 
-                continuation.invokeOnCancellation { popup.cancel() }
-            }
-        } ?: return null
+                    continuation.invokeOnCancellation { popup.cancel() }
+                }
+            } ?: return null
+        }
 
         val testMethods = selected.flatMap { byClass[it].orEmpty() }.ifEmpty { return null }
 
