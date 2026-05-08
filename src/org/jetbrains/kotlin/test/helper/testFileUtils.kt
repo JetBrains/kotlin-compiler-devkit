@@ -29,7 +29,7 @@ val VirtualFile.simpleNameUntilFirstDot: String
     }
 
 
-private val supportedExtensions = listOf("kt", "kts", "args", "can-freeze-ide", "test")
+val SUPPORTED_EXTENSIONS = listOf("kt", "kts", "args", "can-freeze-ide", "test")
 
 enum class TestDataType {
     File,
@@ -38,7 +38,7 @@ enum class TestDataType {
     RelatedFile,
 }
 
-fun VirtualFile.isSupportedByExtension(): Boolean = extension in supportedExtensions
+fun VirtualFile.isSupportedByExtension(): Boolean = extension in SUPPORTED_EXTENSIONS
 
 fun VirtualFile?.getTestDataType(project: Project): TestDataType? {
     if (this == null) return null
@@ -48,7 +48,7 @@ fun VirtualFile?.getTestDataType(project: Project): TestDataType? {
         return when {
             isSupportedByExtension() -> TestDataType.File
             isDirectory -> TestDataType.DirectoryOfFiles
-            supportedExtensions.any { parent?.findChild("$nameWithoutAllExtensions.$it") != null } -> TestDataType.RelatedFile
+            SUPPORTED_EXTENSIONS.any { parent?.findChild("$nameWithoutAllExtensions.$it") != null } -> TestDataType.RelatedFile
             else -> null
         }
     }
@@ -115,7 +115,7 @@ fun VirtualFile.mainTestFileOrNull(project: Project): VirtualFile? {
         TestDataType.Directory,
         TestDataType.DirectoryOfFiles -> this
 
-        TestDataType.RelatedFile -> supportedExtensions.firstNotNullOfOrNull { parent.findChild("$nameWithoutAllExtensions.$it") }
+        TestDataType.RelatedFile -> SUPPORTED_EXTENSIONS.firstNotNullOfOrNull { parent.findChild("$nameWithoutAllExtensions.$it") }
 
         null -> null
     }

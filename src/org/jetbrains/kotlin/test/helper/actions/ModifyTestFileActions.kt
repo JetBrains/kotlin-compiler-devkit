@@ -14,6 +14,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.findDocument
 import com.intellij.psi.PsiDocumentManager
 import kotlinx.coroutines.launch
+import org.jetbrains.kotlin.test.helper.SUPPORTED_EXTENSIONS
 import org.jetbrains.kotlin.test.helper.collectDiffsRecursively
 import org.jetbrains.kotlin.test.helper.getRelatedTestFiles
 import java.nio.file.Paths
@@ -42,7 +43,7 @@ abstract class AbstractModifyTestFileAction : DumbAwareAction() {
                 .ifEmpty { return@launch }
 
             @Suppress("UnstableApiUsage")
-            writeCommandAction(project, "Removing FIR_IDENTICAL") {
+            writeCommandAction(project, "Modifying Test Files") {
                 for (path in paths) {
                     val virtualFile = VfsUtil.findFile(Paths.get(path), true) ?: continue
                     for (relatedFile in virtualFile.getRelatedTestFiles(project)) {
@@ -54,7 +55,7 @@ abstract class AbstractModifyTestFileAction : DumbAwareAction() {
     }
 
     protected open fun handleFile(file: VirtualFile, project: Project) {
-        if (file.extension != "kt") return
+        if (file.extension !in SUPPORTED_EXTENSIONS) return
         val document = file.findDocument() ?: return
         updateDocument(document)
         PsiDocumentManager.getInstance(project).commitDocument(document)
@@ -90,7 +91,7 @@ class RemoveLatestLvDifference : AbstractModifyTestFileAction() {
     }
 
     override fun handleFile(file: VirtualFile, project: Project) {
-        if (file.name.endsWith(".latestLV.kt")) {
+        if (SUPPORTED_EXTENSIONS.any { file.name.endsWith(".latestLV.$it") }) {
             file.delete(this)
         } else {
             super.handleFile(file, project)
