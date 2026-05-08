@@ -153,7 +153,6 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
             val testDescriptions = file.collectTestDescriptions(project)
             val testDeclarations = testDescriptions.map { it.psi }
-            goToAction.testMethods = testDeclarations
             logger.info("methods collected")
 
             val topLevelDirectory = testDeclarations.firstNotNullOfOrNull { method ->
@@ -179,8 +178,10 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                 }
 
                 val runnerLabel = topLevelClass.buildRunnerLabel(testTags)
-                runnerLabel to group
+                Triple(runnerLabel, group, testMethod)
             }.sortedBy { it.first }
+
+            goToAction.testMethods = items.map { it.third }
 
             return UpdateResult(
                 labels = items.map { it.first },
@@ -276,7 +277,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         var testMethods: List<PsiNameIdentifierOwner> = emptyList()
 
         override fun actionPerformed(e: AnActionEvent) {
-            PsiTargetNavigator { testMethods }.navigate(baseEditor.editor, "")
+            PsiTargetNavigator { listOfNotNull(testMethods.elementAtOrNull(state.currentChosenGroup)) }.navigate(baseEditor.editor, "")
         }
 
     }
@@ -365,7 +366,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
 class DelegatingRunDebugAction(
     private val action: AnAction,
-    private val identifier: PsiElement,
+    val identifier: PsiElement,
     private val topLevelClass: PsiClass,
 ) : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
