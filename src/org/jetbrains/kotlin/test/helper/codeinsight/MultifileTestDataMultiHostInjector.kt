@@ -31,7 +31,10 @@ class MultifileTestDataMultiHostInjector: MultiHostInjector {
 
         val textBlock = (context as? MultifileTestDataTextBlock)?.takeIf { it.textLength != 0 } ?: return
         val language = when {
-            textBlock.fileContent != null -> textBlock.fileContent?.entry?.fileHeader?.injectedLanguage?.takeUnless { it == PlainTextLanguage.INSTANCE }
+            textBlock.fileContent != null ->
+                (textBlock.fileContent?.entry?.fileHeader?.injectedLanguage ?: KotlinLanguage.INSTANCE)
+                    .takeUnless { it == PlainTextLanguage.INSTANCE }
+
             textBlock.preamble != null -> KotlinLanguage.INSTANCE
             else -> null
         } ?: return
