@@ -67,6 +67,8 @@
         <fileTypeOverrider implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFileTypeOverrider"/>
 
         <multiHostInjector implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataMultiHostInjector"/>
+
+        <highlightErrorFilter implementation="org.jetbrains.kotlin.test.helper.lang.TestDataFileHighlightErrorFilter" />
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">

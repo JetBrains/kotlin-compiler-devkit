@@ -36,16 +36,6 @@ class MultifileTestDataMultiHostInjector: MultiHostInjector {
             else -> null
         } ?: return
 
-        if (textBlock.fileContent != null) {
-            val ignoredLanguageIds =
-                TestDataPathsConfiguration.getInstance(context.project)
-                    .ignoredLanguagesForInjection
-                    .mapTo(hashSetOf(), String::toLowerCaseAsciiOnly)
-            if (language.id.toLowerCaseAsciiOnly() in ignoredLanguageIds) {
-                return
-            }
-        }
-
         registrar.startInjecting(language)
         registrar.addPlace(null, null, textBlock, TextRange(0, textBlock.textLength))
         registrar.doneInjecting()
