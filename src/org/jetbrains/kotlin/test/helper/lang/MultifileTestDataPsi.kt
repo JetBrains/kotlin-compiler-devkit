@@ -9,6 +9,7 @@ import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.LiteralTextEscaper
 import com.intellij.psi.PsiLanguageInjectionHost
+import com.intellij.psi.impl.source.tree.injected.InjectionBackgroundSuppressor
 import com.intellij.psi.util.PsiTreeUtil
 
 internal abstract class InjectableLanguageInjectionHost(node: ASTNode) : ASTWrapperPsiElement(node), PsiLanguageInjectionHost {
@@ -100,7 +101,8 @@ internal class MultifileTestDataFileContent(node: ASTNode) : InjectableLanguageI
         get() = parent as? MultifileTestDataEntry
 }
 
-internal class MultifileTestDataTextBlock(node: ASTNode) : InjectableLanguageInjectionHost(node) {
+internal class MultifileTestDataTextBlock(node: ASTNode) : InjectableLanguageInjectionHost(node),
+    InjectionBackgroundSuppressor {
     val fileContent: MultifileTestDataFileContent?
         get() = parent as? MultifileTestDataFileContent
 
