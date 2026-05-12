@@ -12,6 +12,7 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
@@ -207,20 +208,35 @@ class TestDataEditor(
             add(tabs, BorderLayout.CENTER)
             tabs.addChangeListener {
                 if (suppressSelectionChange) return@addChangeListener
-                val selectedEditor = previewEditorState.previewEditors.getOrNull(tabs.selectedIndex) ?: return@addChangeListener
-                previewEditorState.chooseNewEditor(selectedEditor)
-                chooseAdditionalFileAction.updateBoxList()
-                updatePreviewEditor()
+                val previewEditors = previewEditorState.previewEditors
+                if (previewEditors.isEmpty()) return@addChangeListener
+                val tabIndex = tabs.selectedIndex
+                val selectedIndex = if (tabIndex in previewEditors.indices) tabIndex else 0
+                if (selectedIndex != tabIndex) {
+                    suppressSelectionChange = true
+                    try {
+                        tabs.selectedIndex = selectedIndex
+                    } finally {
+                        suppressSelectionChange = false
+                    }
+                }
+                applySelectedEditor(previewEditors[selectedIndex])
             }
             refreshTabs()
+        }
+
+        private fun applySelectedEditor(editor: FileEditor) {
+            previewEditorState.chooseNewEditor(editor)
+            chooseAdditionalFileAction.updateBoxList()
+            updatePreviewEditor()
         }
 
         fun refreshTabs() {
             suppressSelectionChange = true
             try {
                 tabs.removeAll()
-                previewEditorState.previewEditors.forEach { editor ->
-                    tabs.addTab(editor.file?.name ?: "Unknown File")
+                previewEditorState.previewEditors.forEachIndexed { index, editor ->
+                    tabs.addTab(editor.file?.name ?: "Related File #${index + 1}", null)
                 }
             } finally {
                 suppressSelectionChange = false
@@ -232,10 +248,13 @@ class TestDataEditor(
             suppressSelectionChange = true
             try {
                 val selectedIndex = previewEditorState.previewEditors.indexOf(previewEditorState.currentPreview)
-                tabs.selectedIndex = when {
+                val targetIndex = when {
                     tabs.tabCount == 0 -> -1
                     selectedIndex in 0 until tabs.tabCount -> selectedIndex
                     else -> 0
+                }
+                if (targetIndex >= 0) {
+                    tabs.selectedIndex = targetIndex
                 }
                 isVisible = tabs.tabCount > 1
             } finally {
