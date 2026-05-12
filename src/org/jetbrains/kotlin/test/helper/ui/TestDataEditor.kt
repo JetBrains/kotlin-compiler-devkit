@@ -56,7 +56,7 @@ class TestDataEditor(
 
     private lateinit var editorViewMode: EditorViewMode
     lateinit var chooseAdditionalFileAction: ChooseAdditionalFileAction
-    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(splitterOrientationPropertyName, false)
+    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(name + "SplitVertical", false)
 
     private val splitter: JBSplitter by lazy {
         JBSplitter(isVerticalSplit, 0.5f, 0.15f, 0.85f).apply {
@@ -282,7 +282,7 @@ class TestDataEditor(
     ) : FileEditorState {
         override fun canBeMergedWith(otherState: FileEditorState, level: FileEditorStateLevel): Boolean {
             return (otherState is MyFileEditorState
-                    && (isVerticalSplit == null || otherState.isVerticalSplit == isVerticalSplit)
+                    && otherState.isVerticalSplit == isVerticalSplit
                     && (firstState == null || firstState.canBeMergedWith(otherState.firstState!!, level))
                     && (secondState == null || secondState.canBeMergedWith(otherState.secondState!!, level)))
         }
