@@ -17,7 +17,7 @@ are stored per project in `.idea/kotlinTestDataPluginTestDataPaths.xml`.
 ![Settings](pic/settings.png)
 
 The plugin identifies related test files using the following convention: for a test file named `someName.kt`, all files
-that begin with `someName.` are considered related and will appear in the left combo box of the split mode view.
+that begin with `someName.` are considered related and will appear as tabs and in the left combo box of the split mode view.
 You can configure the plugin to search for related files in additional locations beyond the test file's directory.
 This feature is particularly useful when working with Kotlin/JS tests, where you might want to view generated code
 alongside the test file.

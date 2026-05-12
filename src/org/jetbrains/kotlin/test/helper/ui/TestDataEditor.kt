@@ -25,14 +25,16 @@ import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.pom.Navigatable
 import com.intellij.ui.JBSplitter
 import com.intellij.util.SingleAlarm
-import com.intellij.util.ui.JBUI
 import org.jetbrains.kotlin.test.helper.actions.ChooseAdditionalFileAction
 import org.jetbrains.kotlin.test.helper.actions.GeneratedTestComboBoxAction
 import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.state.PreviewEditorState
+import java.awt.BorderLayout
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import javax.swing.JComponent
+import javax.swing.JPanel
+import javax.swing.JTabbedPane
 
 class TestDataEditor(
     val baseEditor: TextEditor,
@@ -64,8 +66,17 @@ class TestDataEditor(
         }
     }
 
+    private val relatedFilesTabs = RelatedFilesTabs()
+
     private val myComponent: JComponent by lazy {
-        JBUI.Panels.simplePanel(splitter).addToTop(myToolbarWrapper).also {
+        JPanel(BorderLayout()).apply {
+            val topPanel = JPanel(BorderLayout()).apply {
+                add(myToolbarWrapper, BorderLayout.NORTH)
+                add(relatedFilesTabs, BorderLayout.SOUTH)
+            }
+            add(topPanel, BorderLayout.NORTH)
+            add(splitter, BorderLayout.CENTER)
+        }.also {
             updatePreviewEditor()
         }
     }
@@ -119,6 +130,7 @@ class TestDataEditor(
                 lastUsedPreviewPropertyName,
                 previewEditorState.currentPreview.file.allExtensions
             )
+        relatedFilesTabs.updateSelection()
         baseEditor.component.isVisible = true
         previewEditorState.currentPreview.component.isVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor
     }
@@ -186,6 +198,47 @@ class TestDataEditor(
     }
 
     private val listenersGenerator: ListenersMultimap = ListenersMultimap()
+
+    private inner class RelatedFilesTabs : JPanel(BorderLayout()) {
+        private val tabs = JTabbedPane()
+        private var suppressSelectionChange = false
+
+        init {
+            add(tabs, BorderLayout.CENTER)
+            tabs.addChangeListener {
+                if (suppressSelectionChange) return@addChangeListener
+                val selectedEditor = previewEditorState.previewEditors.getOrNull(tabs.selectedIndex) ?: return@addChangeListener
+                previewEditorState.chooseNewEditor(selectedEditor)
+                chooseAdditionalFileAction.updateBoxList()
+                updatePreviewEditor()
+            }
+            refreshTabs()
+        }
+
+        fun refreshTabs() {
+            suppressSelectionChange = true
+            try {
+                tabs.removeAll()
+                previewEditorState.previewEditors.forEach { editor ->
+                    tabs.addTab(editor.file?.name ?: "")
+                }
+            } finally {
+                suppressSelectionChange = false
+            }
+            updateSelection()
+        }
+
+        fun updateSelection() {
+            suppressSelectionChange = true
+            try {
+                val selectedIndex = previewEditorState.previewEditors.indexOf(previewEditorState.currentPreview)
+                tabs.selectedIndex = selectedIndex.takeIf { it in 0 until tabs.tabCount } ?: -1
+                isVisible = tabs.tabCount > 1
+            } finally {
+                suppressSelectionChange = false
+            }
+        }
+    }
 
     private inner class DoublingEventListenerDelegate(private val myDelegate: PropertyChangeListener) : PropertyChangeListener {
         override fun propertyChange(evt: PropertyChangeEvent) {
@@ -292,6 +345,7 @@ class TestDataEditor(
             }
             previewEditorState.updatePreviewEditors()
             chooseAdditionalFileAction.updateBoxList()
+            relatedFilesTabs.refreshTabs()
             updatePreviewEditor()
         }
     }
