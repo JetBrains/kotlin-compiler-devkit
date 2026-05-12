@@ -8,9 +8,11 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -54,9 +56,10 @@ class TestDataEditor(
 
     private lateinit var editorViewMode: EditorViewMode
     lateinit var chooseAdditionalFileAction: ChooseAdditionalFileAction
+    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(splitterOrientationPropertyName, false)
 
     private val splitter: JBSplitter by lazy {
-        JBSplitter(false, 0.5f, 0.15f, 0.85f).apply {
+        JBSplitter(isVerticalSplit, 0.5f, 0.15f, 0.85f).apply {
             splitterProportionKey = splitterProportionKey
             firstComponent = baseEditor.component
             secondComponent = previewEditorState.currentPreview.component
@@ -100,7 +103,8 @@ class TestDataEditor(
                 "TestDataHelperToolbar_left",
                 DefaultActionGroup(
                     chooseAdditionalFileAction,
-                    chooseAdditionalFileAction.diffAction
+                    chooseAdditionalFileAction.diffAction,
+                    ToggleSplitOrientationAction()
                 ),
                 true
             )
@@ -121,6 +125,22 @@ class TestDataEditor(
             )
         baseEditor.component.isVisible = true
         previewEditorState.currentPreview.component.isVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor
+    }
+
+    private fun updateSplitOrientation(isVertical: Boolean) {
+        isVerticalSplit = isVertical
+        splitter.orientation = isVertical
+        PropertiesComponent.getInstance().setValue(splitterOrientationPropertyName, isVertical, false)
+        myComponent.revalidate()
+        myComponent.repaint()
+    }
+
+    private inner class ToggleSplitOrientationAction : ToggleAction("Vertical Split") {
+        override fun isSelected(e: AnActionEvent): Boolean = isVerticalSplit
+
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            updateSplitOrientation(state)
+        }
     }
 
 
@@ -168,6 +188,9 @@ class TestDataEditor(
         }
         if (state.secondState != null) {
             this@TestDataEditor.previewEditorState.currentPreview.setState(state.secondState)
+        }
+        if (state.isVerticalSplit != null) {
+            updateSplitOrientation(state.isVerticalSplit)
         }
         if (state.splitLayout != null) {
             editorViewMode = state.splitLayout
@@ -254,10 +277,12 @@ class TestDataEditor(
     class MyFileEditorState(
         val splitLayout: EditorViewMode?,
         val firstState: FileEditorState?,
-        val secondState: FileEditorState?
+        val secondState: FileEditorState?,
+        val isVerticalSplit: Boolean? = null
     ) : FileEditorState {
         override fun canBeMergedWith(otherState: FileEditorState, level: FileEditorStateLevel): Boolean {
             return (otherState is MyFileEditorState
+                    && (isVerticalSplit == null || otherState.isVerticalSplit == isVerticalSplit)
                     && (firstState == null || firstState.canBeMergedWith(otherState.firstState!!, level))
                     && (secondState == null || secondState.canBeMergedWith(otherState.secondState!!, level)))
         }
@@ -336,7 +361,12 @@ class TestDataEditor(
     }
 
     override fun getState(level: FileEditorStateLevel): FileEditorState {
-        return MyFileEditorState(editorViewMode, baseEditor.getState(level), previewEditorState.currentPreview.getState(level))
+        return MyFileEditorState(
+            editorViewMode,
+            baseEditor.getState(level),
+            previewEditorState.currentPreview.getState(level),
+            isVerticalSplit
+        )
     }
 
     override fun isModified(): Boolean {
@@ -349,6 +379,9 @@ class TestDataEditor(
 
     private val lastUsedPreviewPropertyName: String
         get() = name + "LastUsedPreview"
+
+    private val splitterOrientationPropertyName: String
+        get() = name + "SplitVertical"
 
     override fun getFile(): VirtualFile? {
         return baseEditor.file
