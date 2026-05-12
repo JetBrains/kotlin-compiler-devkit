@@ -220,7 +220,7 @@ class TestDataEditor(
             try {
                 tabs.removeAll()
                 previewEditorState.previewEditors.forEach { editor ->
-                    tabs.addTab(editor.file?.name ?: "")
+                    tabs.addTab(editor.file?.name ?: "Unknown File")
                 }
             } finally {
                 suppressSelectionChange = false
@@ -232,7 +232,11 @@ class TestDataEditor(
             suppressSelectionChange = true
             try {
                 val selectedIndex = previewEditorState.previewEditors.indexOf(previewEditorState.currentPreview)
-                tabs.selectedIndex = selectedIndex.takeIf { it in 0 until tabs.tabCount } ?: -1
+                tabs.selectedIndex = when {
+                    tabs.tabCount == 0 -> -1
+                    selectedIndex in 0 until tabs.tabCount -> selectedIndex
+                    else -> 0
+                }
                 isVisible = tabs.tabCount > 1
             } finally {
                 suppressSelectionChange = false
