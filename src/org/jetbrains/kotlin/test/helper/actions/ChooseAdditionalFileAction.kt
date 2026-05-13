@@ -10,6 +10,8 @@ import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.util.minimumWidth
+import com.intellij.util.ui.JBUI
 import org.jetbrains.kotlin.test.helper.state.PreviewEditorState
 import org.jetbrains.kotlin.test.helper.ui.TestDataEditor
 import org.jetbrains.kotlin.test.helper.ui.WidthAdjustingPanel
@@ -39,13 +41,20 @@ class ChooseAdditionalFileAction(
     }
 
     override fun createCustomComponent(presentation: Presentation, place: String): JComponent {
-        val label = JBLabel("Available files: ")
+        val label = JBLabel("Files: ")
 
         return WidthAdjustingPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
             add(label)
             add(super.createCustomComponent(presentation, place))
         }
+    }
+
+    override fun createComboBoxButton(presentation: Presentation): ComboBoxButton {
+        val comboBoxButton = super.createComboBoxButton(presentation)
+        @Suppress("DEPRECATION")
+        comboBoxButton.minimumWidth = JBUI.scale(50)
+        return comboBoxButton
     }
 
     override fun update(item: FileEditor, presentation: Presentation, popup: Boolean) {

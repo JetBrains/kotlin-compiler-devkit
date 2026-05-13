@@ -27,7 +27,9 @@ import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.util.parentsOfType
 import com.intellij.testIntegration.TestRunLineMarkerProvider
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.util.minimumWidth
 import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.buildRunnerLabel
@@ -131,6 +133,13 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
             val panel = super.createCustomComponent(presentation, place) as JPanel
             add(panel)
         }
+    }
+
+    override fun createComboBoxButton(presentation: Presentation): ComboBoxButton {
+        val comboBoxButton = super.createComboBoxButton(presentation)
+        @Suppress("DEPRECATION")
+        comboBoxButton.minimumWidth = JBUI.scale(80)
+        return comboBoxButton
     }
 
     private fun updateBox() {
