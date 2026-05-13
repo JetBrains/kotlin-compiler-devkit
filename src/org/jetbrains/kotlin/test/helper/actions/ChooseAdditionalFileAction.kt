@@ -44,7 +44,7 @@ class ChooseAdditionalFileAction(
     override fun createCustomComponent(presentation: Presentation, place: String): JComponent {
         val label = JBLabel("Split with: ")
 
-        return WidthAdjustingPanel().apply {
+        return WidthAdjustingPanel(1).apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
             add(label)
             add(super.createCustomComponent(presentation, place))

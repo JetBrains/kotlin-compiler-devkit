@@ -127,7 +127,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
     }
 
     override fun createCustomComponent(presentation: Presentation, place: String): JComponent {
-        return WidthAdjustingPanel().apply {
+        return WidthAdjustingPanel(2).apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
             add(JBLabel("Tests: "))
             val panel = super.createCustomComponent(presentation, place) as JPanel
