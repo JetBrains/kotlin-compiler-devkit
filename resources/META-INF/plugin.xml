@@ -11,6 +11,8 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="org.jetbrains.kotlin.test.helper.actions.FavoriteTestRunnersService"/>
+
         <fileEditorProvider implementation="org.jetbrains.kotlin.test.helper.KotlinTestDataFileEditorProvider"/>
         <projectConfigurable bundle="messages.MyBundle" instance="org.jetbrains.kotlin.test.helper.TestDataPathsConfigurable"
                              key="pluginSettingsDisplayName"/>
