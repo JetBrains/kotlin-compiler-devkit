@@ -17,6 +17,8 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.event.VisibleAreaEvent
+import com.intellij.openapi.editor.event.VisibleAreaListener
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
@@ -61,6 +63,9 @@ class TestDataEditor(
     private lateinit var editorViewMode: EditorViewMode
     lateinit var chooseAdditionalFileAction: ChooseAdditionalFileAction
     private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(name + "SplitVertical", true)
+
+    private var scrollSyncDisposable: Disposable? = null
+    private var isSyncingScroll = false
 
     private val splitter: JBSplitter by lazy {
         JBSplitter(isVerticalSplit, 0.5f, 0.15f, 0.85f).apply {
@@ -136,6 +141,47 @@ class TestDataEditor(
             )
         baseEditor.component.isVisible = true
         previewEditorState.currentPreview.component.isVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor
+        updateScrollSync()
+    }
+
+    private fun updateScrollSync() {
+        scrollSyncDisposable?.let { Disposer.dispose(it) }
+        scrollSyncDisposable = null
+
+        if (editorViewMode != EditorViewMode.BaseAndAdditionalEditor) return
+
+        val previewEditor = previewEditorState.currentPreview as? TextEditor ?: return
+        if (previewEditor.file?.extension != "kt") return
+        if (baseEditor.file?.extension != "kt") return
+
+        val disposable = Disposer.newDisposable("ScrollSync")
+        Disposer.register(this, disposable)
+        scrollSyncDisposable = disposable
+
+        val baseRawEditor = baseEditor.editor
+        val previewRawEditor = previewEditor.editor
+
+        fun syncScrollPosition(from: Editor, to: Editor) {
+            if (isSyncingScroll) return
+            isSyncingScroll = true
+            try {
+                val rect = from.scrollingModel.visibleArea
+                to.scrollingModel.disableAnimation()
+                to.scrollingModel.scroll(rect.x, rect.y)
+                to.scrollingModel.enableAnimation()
+            } finally {
+                isSyncingScroll = false
+            }
+        }
+
+        baseRawEditor.scrollingModel.addVisibleAreaListener(
+            VisibleAreaListener { _: VisibleAreaEvent -> syncScrollPosition(baseRawEditor, previewRawEditor) },
+            disposable
+        )
+        previewRawEditor.scrollingModel.addVisibleAreaListener(
+            VisibleAreaListener { _: VisibleAreaEvent -> syncScrollPosition(previewRawEditor, baseRawEditor) },
+            disposable
+        )
     }
 
     private fun applyOrientation(isVertical: Boolean) {
