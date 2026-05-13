@@ -118,7 +118,7 @@ class TestDataRunnerService(
         } else {
             withContext(Dispatchers.EDT) {
                 suspendCancellableCoroutine { continuation ->
-                    val favoriteService = FavoriteTestRunnersService.getInstance()
+                    val favoriteService = FavoriteTestRunnersService.getInstance(e.project!!)
                     val sortedKeys = byClass.keys.sortedWith(
                         compareBy(
                             { !favoriteService.isFavorite(it) },

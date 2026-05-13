@@ -1,39 +1,42 @@
 package org.jetbrains.kotlin.test.helper.actions
 
-import com.intellij.openapi.components.PersistentStateComponent
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.State
-import com.intellij.openapi.components.Storage
-import com.intellij.openapi.components.service
+import com.intellij.openapi.components.*
+import com.intellij.openapi.project.Project
 
-@Service(Service.Level.APP)
-@State(name = "FavoriteTestRunners", storages = [Storage("favoriteTestRunners.xml")])
-class FavoriteTestRunnersService : PersistentStateComponent<FavoriteTestRunnersService> {
+@Service(Service.Level.PROJECT)
+@State(name = "FavoriteTestRunners", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
+class FavoriteTestRunnersService
+    : SerializablePersistentStateComponent<FavoriteTestRunnersService.State>(State()) {
     companion object {
         const val FAVORITE_PREFIX = "★ "
 
-        fun getInstance(): FavoriteTestRunnersService = service()
+        fun getInstance(project: Project): FavoriteTestRunnersService = project.service<FavoriteTestRunnersService>()
 
         fun formatRunnerName(runnerName: String, isFavorite: Boolean): String =
             if (isFavorite) "$FAVORITE_PREFIX$runnerName" else runnerName
     }
 
-    private var favoriteRunners: MutableSet<String> = mutableSetOf()
+    private var favoriteRunners: Set<String>
+        get() = state.favoriteRunners
+        set(value) {
+            updateState {
+                State(value)
+            }
+        }
 
-    override fun getState(): FavoriteTestRunnersService = this
-
-    override fun loadState(state: FavoriteTestRunnersService) {
-        favoriteRunners.clear()
-        favoriteRunners.addAll(state.favoriteRunners)
+    fun isFavorite(runnerName: String): Boolean {
+        return runnerName in state.favoriteRunners
     }
-
-    fun isFavorite(runnerName: String): Boolean = runnerName in favoriteRunners
 
     fun toggleFavorite(runnerName: String) {
         if (runnerName in favoriteRunners) {
-            favoriteRunners.remove(runnerName)
+            favoriteRunners -= runnerName
         } else {
-            favoriteRunners.add(runnerName)
+            favoriteRunners += runnerName
         }
     }
+
+    data class State(
+        @JvmField val favoriteRunners: Set<String> = setOf()
+    )
 }

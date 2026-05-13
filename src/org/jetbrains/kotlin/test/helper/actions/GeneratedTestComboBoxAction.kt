@@ -69,7 +69,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
     }
 
     override fun update(item: String?, presentation: Presentation, popup: Boolean) {
-        val isFavorite = item != null && FavoriteTestRunnersService.getInstance().isFavorite(item)
+        val isFavorite = item != null && FavoriteTestRunnersService.getInstance(baseEditor.editor.project!!).isFavorite(item)
         presentation.text = item?.let { FavoriteTestRunnersService.formatRunnerName(it, isFavorite) }
 
         if (item != null) {
@@ -101,7 +101,10 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                         AllIcons.Nodes.Favorite,
                     ) {
                         override fun actionPerformed(e: AnActionEvent) {
-                            FavoriteTestRunnersService.getInstance().toggleFavorite(item)
+                            val project = e.project!!
+                            FavoriteTestRunnersService.getInstance(project).toggleFavorite(item)
+                            LastUsedTestService.getInstance(project)
+                                .updateChosenRunner(state.topLevelDirectory, item)
                             state.updateTestsList()
                         }
                     },
@@ -174,7 +177,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
             }
 
             val ex = TestRunLineMarkerProvider()
-            val favoriteService = FavoriteTestRunnersService.getInstance()
+            val favoriteService = FavoriteTestRunnersService.getInstance(project)
             val items = testDeclarations.mapNotNull { testMethod ->
                 val identifier = testMethod.nameIdentifier ?: return@mapNotNull null
                 val info = ex.getInfo(identifier) ?: return@mapNotNull null
