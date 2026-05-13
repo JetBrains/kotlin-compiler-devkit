@@ -5,14 +5,17 @@ import com.intellij.execution.ExecutionListener
 import com.intellij.execution.ExecutionManager
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.icons.AllIcons
 import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ToggleAction
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -27,6 +30,7 @@ import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.pom.Navigatable
 import com.intellij.ui.JBSplitter
 import com.intellij.util.SingleAlarm
+import com.intellij.util.messages.Topic
 import com.intellij.util.ui.JBUI
 import org.jetbrains.kotlin.test.helper.actions.ChooseAdditionalFileAction
 import org.jetbrains.kotlin.test.helper.actions.GeneratedTestComboBoxAction
@@ -56,7 +60,7 @@ class TestDataEditor(
 
     private lateinit var editorViewMode: EditorViewMode
     lateinit var chooseAdditionalFileAction: ChooseAdditionalFileAction
-    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(name + "SplitVertical", false)
+    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(name + "SplitVertical", true)
 
     private val splitter: JBSplitter by lazy {
         JBSplitter(isVerticalSplit, 0.5f, 0.15f, 0.85f).apply {
@@ -88,6 +92,13 @@ class TestDataEditor(
 
     init {
         steppingTestDataHighlighter.register()
+        ApplicationManager.getApplication().messageBus.connect(this)
+            .subscribe(SPLIT_ORIENTATION_TOPIC, SplitOrientationListener { editorName, isVertical, source ->
+                if (source === this@TestDataEditor) return@SplitOrientationListener
+                if (editorName != name) return@SplitOrientationListener
+                if (isVerticalSplit == isVertical) return@SplitOrientationListener
+                applyOrientation(isVertical)
+            })
     }
 
     enum class EditorViewMode {
@@ -127,19 +138,35 @@ class TestDataEditor(
         previewEditorState.currentPreview.component.isVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor
     }
 
-    private fun updateSplitOrientation(isVertical: Boolean) {
+    private fun applyOrientation(isVertical: Boolean) {
         isVerticalSplit = isVertical
         splitter.orientation = isVertical
-        PropertiesComponent.getInstance().setValue(splitterOrientationPropertyName, isVertical, false)
         myComponent.revalidate()
         myComponent.repaint()
     }
 
-    private inner class ToggleSplitOrientationAction : ToggleAction("Vertical Split") {
+    private fun updateSplitOrientation(isVertical: Boolean) {
+        if (isVerticalSplit == isVertical) return
+        applyOrientation(isVertical)
+        PropertiesComponent.getInstance().setValue(splitterOrientationPropertyName, isVertical, false)
+        ApplicationManager.getApplication().messageBus
+            .syncPublisher(SPLIT_ORIENTATION_TOPIC)
+            .onOrientationChanged(name, isVertical, this)
+    }
+
+    private inner class ToggleSplitOrientationAction : ToggleAction(
+        "Horizontal Split",
+        "Split editors horizontally",
+        AllIcons.Actions.SplitHorizontally
+    ) {
         override fun isSelected(e: AnActionEvent): Boolean = isVerticalSplit
 
         override fun setSelected(e: AnActionEvent, state: Boolean) {
             updateSplitOrientation(state)
+        }
+
+        override fun getActionUpdateThread(): ActionUpdateThread {
+            return ActionUpdateThread.BGT
         }
     }
 
@@ -397,5 +424,17 @@ class TestDataEditor(
 
     override fun navigateTo(navigatable: Navigatable) {
         baseEditor.navigateTo(navigatable)
+    }
+
+    fun interface SplitOrientationListener {
+        fun onOrientationChanged(editorName: String, isVertical: Boolean, source: TestDataEditor)
+    }
+
+    companion object {
+        @JvmStatic
+        val SPLIT_ORIENTATION_TOPIC: Topic<SplitOrientationListener> = Topic.create(
+            "TestDataEditor split orientation",
+            SplitOrientationListener::class.java,
+        )
     }
 }
