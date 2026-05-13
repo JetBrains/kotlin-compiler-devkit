@@ -70,7 +70,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
     override fun update(item: String?, presentation: Presentation, popup: Boolean) {
         val isFavorite = item != null && FavoriteTestRunnersService.getInstance().isFavorite(item)
-        presentation.text = if (isFavorite) "★ $item" else item
+        presentation.text = item?.let { FavoriteTestRunnersService.formatRunnerName(it, isFavorite) }
 
         if (item != null) {
             val index = state.methodsClassNames.indexOf(item)
