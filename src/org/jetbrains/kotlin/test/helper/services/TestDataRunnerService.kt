@@ -124,12 +124,12 @@ class TestDataRunnerService(
                             { !favoriteService.isFavorite(it) },
                             { it },
                         )
-                    ).map { if (favoriteService.isFavorite(it)) "★ $it" else it }
+                    ).map { FavoriteTestRunnersService.formatRunnerName(it, favoriteService.isFavorite(it)) }
                     val popup = JBPopupFactory.getInstance()
                         .createPopupChooserBuilder(sortedKeys)
                         .setTitle("Select Test Class")
                         .setItemsChosenCallback { selected ->
-                            continuation.resume(selected.map { it.removePrefix("★ ") }.toSet())
+                            continuation.resume(selected.map { it.removePrefix(FavoriteTestRunnersService.FAVORITE_PREFIX) }.toSet())
                         }
                         .addListener(object: JBPopupListener {
                             override fun onClosed(event: LightweightWindowEvent) {

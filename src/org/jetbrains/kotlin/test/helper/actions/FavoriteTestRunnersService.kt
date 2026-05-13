@@ -10,7 +10,12 @@ import com.intellij.openapi.components.service
 @State(name = "FavoriteTestRunners", storages = [Storage("favoriteTestRunners.xml")])
 class FavoriteTestRunnersService : PersistentStateComponent<FavoriteTestRunnersService> {
     companion object {
+        const val FAVORITE_PREFIX = "★ "
+
         fun getInstance(): FavoriteTestRunnersService = service()
+
+        fun formatRunnerName(runnerName: String, isFavorite: Boolean): String =
+            if (isFavorite) "$FAVORITE_PREFIX$runnerName" else runnerName
     }
 
     var favoriteRunners: MutableSet<String> = mutableSetOf()
