@@ -71,20 +71,18 @@ class TestDataEditor(
     }
 
     private val myComponent: JComponent by lazy {
-        JBUI.Panels.simplePanel(splitter).addToTop(myToolbarWrapper).also {
+        JBUI.Panels.simplePanel(splitter).addToTop(myToolbarWrapper.component).also {
             updatePreviewEditor()
         }
     }
 
-    private val myToolbarWrapper: SplitToolbarPanel by lazy {
+    private val myToolbarWrapper: ActionToolbar by lazy {
         fun ActionToolbar.updateConfig() {
             targetComponent = splitter
             isReservePlaceAutoPopupIcon = false
         }
 
-        val leftToolbar = createFileChooserToolbar().apply { updateConfig() }
-        val rightToolbar = createTestRunToolbar().apply { updateConfig() }
-        SplitToolbarPanel(leftToolbar, rightToolbar)
+        createToolbar().apply { updateConfig() }
     }
 
     private val steppingTestDataHighlighter = SteppingTestDataHighlighter(baseEditor)
@@ -105,19 +103,23 @@ class TestDataEditor(
         BaseAndAdditionalEditor;
     }
 
-    private fun createFileChooserToolbar(): ActionToolbar {
-        chooseAdditionalFileAction = ChooseAdditionalFileAction(this, previewEditorState)
+    private fun createToolbar(): ActionToolbar {
+        createFileChooserActions()
+        val rightActions = createTestRunActions().map(::rightAlignedAction)
+        val actionGroup = DefaultActionGroup(
+            chooseAdditionalFileAction,
+            chooseAdditionalFileAction.diffAction,
+            ToggleSplitOrientationAction(),
+            ToolbarSpacerAction(),
+            *rightActions.toTypedArray(),
+        )
         return ActionManager
             .getInstance()
-            .createActionToolbar(
-                "TestDataHelperToolbar_left",
-                DefaultActionGroup(
-                    chooseAdditionalFileAction,
-                    chooseAdditionalFileAction.diffAction,
-                    ToggleSplitOrientationAction()
-                ),
-                true
-            )
+            .createActionToolbar("TestDataHelperToolbar", actionGroup, true)
+    }
+
+    private fun createFileChooserActions() {
+        chooseAdditionalFileAction = ChooseAdditionalFileAction(this, previewEditorState)
     }
 
     fun updatePreviewEditor() {
@@ -211,7 +213,7 @@ class TestDataEditor(
     }
 
 
-    private fun createTestRunToolbar(): ActionToolbar {
+    private fun createTestRunActions(): List<AnAction> {
         val generatedTestComboBoxAction = GeneratedTestComboBoxAction(baseEditor)
 
         val connection = baseEditor.editor.project?.messageBus?.connect(this)
@@ -229,21 +231,15 @@ class TestDataEditor(
             ) = generatedTestComboBoxAction.state.updateTestsList()
         })
 
-        return ActionManager
-            .getInstance()
-            .createActionToolbar(
-                "TestDataHelperToolbar_right",
-                DefaultActionGroup(
-                    generatedTestComboBoxAction,
-                    generatedTestComboBoxAction.runAction,
-                    generatedTestComboBoxAction.debugAction,
-                    generatedTestComboBoxAction.runAndApply,
-                    generatedTestComboBoxAction.goToAction,
-                    generatedTestComboBoxAction.runAllTestsAction,
-                    generatedTestComboBoxAction.moreActionsGroup
-                ),
-                true
-            )
+        return listOf(
+            generatedTestComboBoxAction,
+            generatedTestComboBoxAction.runAction,
+            generatedTestComboBoxAction.debugAction,
+            generatedTestComboBoxAction.runAndApply,
+            generatedTestComboBoxAction.goToAction,
+            generatedTestComboBoxAction.runAllTestsAction,
+            generatedTestComboBoxAction.moreActionsGroup,
+        )
     }
 
     // ------------------------------------- actions -------------------------------------
@@ -267,7 +263,7 @@ class TestDataEditor(
 
     private fun invalidateLayout() {
         updatePreviewEditor()
-        myToolbarWrapper.refresh()
+        myToolbarWrapper.updateActionsAsync()
         myComponent.repaint()
         val focusComponent = preferredFocusedComponent
         if (focusComponent != null) {
@@ -468,6 +464,47 @@ class TestDataEditor(
 
     fun interface SplitOrientationListener {
         fun onOrientationChanged(editorName: String, isVertical: Boolean, source: TestDataEditor)
+    }
+
+    private class ToolbarSpacerAction : AnAction(), RightAlignedToolbarAction {
+        override fun actionPerformed(e: AnActionEvent) {
+        }
+
+        override fun update(e: AnActionEvent) {
+            e.presentation.isEnabledAndVisible = false
+        }
+
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+    }
+
+    private fun rightAlignedAction(action: AnAction): AnAction {
+        return if (action is CustomComponentAction) {
+            RightAlignedCustomComponentAction(action)
+        } else {
+            RightAlignedAction(action)
+        }
+    }
+
+    private open class RightAlignedAction(private val delegate: AnAction) : AnAction(), RightAlignedToolbarAction, ActionWithDelegate<AnAction> {
+        override fun getDelegate(): AnAction = delegate
+
+        override fun actionPerformed(e: AnActionEvent) {
+            delegate.actionPerformed(e)
+        }
+
+        override fun update(e: AnActionEvent) {
+            delegate.update(e)
+        }
+
+        override fun getActionUpdateThread(): ActionUpdateThread = delegate.actionUpdateThread
+    }
+
+    private class RightAlignedCustomComponentAction(
+        private val customDelegate: CustomComponentAction,
+    ) : RightAlignedAction(customDelegate as AnAction), CustomComponentAction {
+        override fun createCustomComponent(presentation: Presentation, place: String): JComponent {
+            return customDelegate.createCustomComponent(presentation, place)
+        }
     }
 
     companion object {
