@@ -12,6 +12,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.util.minimumWidth
 import com.intellij.util.ui.JBUI
+import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.state.PreviewEditorState
 import org.jetbrains.kotlin.test.helper.ui.TestDataEditor
 import org.jetbrains.kotlin.test.helper.ui.WidthAdjustingPanel
@@ -41,7 +42,7 @@ class ChooseAdditionalFileAction(
     }
 
     override fun createCustomComponent(presentation: Presentation, place: String): JComponent {
-        val label = JBLabel("Files: ")
+        val label = JBLabel("Split with: ")
 
         return WidthAdjustingPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
@@ -64,8 +65,10 @@ class ChooseAdditionalFileAction(
     private val FileEditor?.presentableName: String
         get() {
             val file = this?.file ?: return NO_NAME_PROVIDED
-            if (file.toNioPath().parent == testDataEditor.baseEditor.file?.toNioPath()?.parent)
-                return file.name
+            val mainFile = testDataEditor.baseEditor.file
+            if (file == mainFile) return "None"
+            if (file.toNioPath().parent == mainFile?.toNioPath()?.parent)
+                return file.allExtensions
             return uniqueNameBuilder?.getShortPath(file) ?: file.name
         }
 
