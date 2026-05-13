@@ -1,4 +1,4 @@
-package org.jetbrains.kotlin.test.helper.lang
+package org.jetbrains.kotlin.test.helper.codeinsight
 
 import com.intellij.codeInsight.highlighting.HighlightErrorFilter
 import com.intellij.injected.editor.VirtualFileWindow
