@@ -467,8 +467,7 @@ class TestDataEditor(
     }
 
     private class ToolbarSpacerAction : AnAction(), RightAlignedToolbarAction {
-        override fun actionPerformed(e: AnActionEvent) {
-        }
+        override fun actionPerformed(e: AnActionEvent) = Unit
 
         override fun update(e: AnActionEvent) {
             e.presentation.isEnabledAndVisible = false
@@ -481,11 +480,11 @@ class TestDataEditor(
         return if (action is CustomComponentAction) {
             RightAlignedCustomComponentAction(action)
         } else {
-            RightAlignedAction(action)
+            SimpleRightAlignedAction(action)
         }
     }
 
-    private open class RightAlignedAction(private val delegate: AnAction) : AnAction(), RightAlignedToolbarAction, ActionWithDelegate<AnAction> {
+    private sealed class RightAlignedAction(private val delegate: AnAction) : AnAction(), RightAlignedToolbarAction, ActionWithDelegate<AnAction> {
         override fun getDelegate(): AnAction = delegate
 
         override fun actionPerformed(e: AnActionEvent) {
@@ -498,6 +497,8 @@ class TestDataEditor(
 
         override fun getActionUpdateThread(): ActionUpdateThread = delegate.actionUpdateThread
     }
+
+    private class SimpleRightAlignedAction(delegate: AnAction) : RightAlignedAction(delegate)
 
     private class RightAlignedCustomComponentAction(
         private val customDelegate: CustomComponentAction,
