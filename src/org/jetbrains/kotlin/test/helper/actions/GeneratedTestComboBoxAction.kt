@@ -174,6 +174,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
             }
 
             val ex = TestRunLineMarkerProvider()
+            val favoriteService = FavoriteTestRunnersService.getInstance()
             val items = testDeclarations.mapNotNull { testMethod ->
                 val identifier = testMethod.nameIdentifier ?: return@mapNotNull null
                 val info = ex.getInfo(identifier) ?: return@mapNotNull null
@@ -192,7 +193,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                 Triple(runnerLabel, group, testMethod)
             }.sortedWith(
                 compareBy(
-                    { !FavoriteTestRunnersService.getInstance().isFavorite(it.first) },
+                    { !favoriteService.isFavorite(it.first) },
                     { it.first },
                 )
             )
