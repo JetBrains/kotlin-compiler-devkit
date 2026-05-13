@@ -45,14 +45,14 @@ class TestTagsEntriesPanel(val state: PluginSettingsState) : AbstractSettingsPan
                 return joinToString(",")
             }
 
-            override fun parseFirst(oldValue: String, newValue: String): String? {
+            override fun parseFirst(oldValue: String, newValue: String): String {
                 return newValue
             }
 
             override fun parseSecond(
                 oldValue: List<String>,
                 newValue: String
-            ): List<String>? {
+            ): List<String> {
                 return newValue.split(",")
             }
         }

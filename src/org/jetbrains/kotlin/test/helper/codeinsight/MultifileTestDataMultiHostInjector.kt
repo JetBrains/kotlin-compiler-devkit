@@ -10,11 +10,9 @@ import com.intellij.psi.PsiLanguageInjectionHost
 import com.intellij.psi.impl.source.tree.PsiCommentImpl
 import org.jetbrains.annotations.Unmodifiable
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.isTestDataFile
 import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataFileContent
 import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataTextBlock
-import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 
 class MultifileTestDataMultiHostInjector: MultiHostInjector {
     private val supportedElementTypes: List<Class<out PsiElement>> =

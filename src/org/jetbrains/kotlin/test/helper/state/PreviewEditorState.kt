@@ -4,13 +4,9 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.getRelatedTestFiles
-import org.jetbrains.kotlin.test.helper.simpleNameUntilFirstDot
 
 class PreviewEditorState(
     private val baseEditor: TextEditor,

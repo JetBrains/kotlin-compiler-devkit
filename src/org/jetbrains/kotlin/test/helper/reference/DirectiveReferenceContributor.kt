@@ -5,7 +5,6 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.*
 import com.intellij.util.ProcessingContext
-import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.isTestDataFile
 
 class DirectiveReferenceContributor : PsiReferenceContributor() {

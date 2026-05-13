@@ -9,16 +9,10 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbar
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.actionSystem.ToggleAction
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.VisibleAreaEvent
-import com.intellij.openapi.editor.event.VisibleAreaListener
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
@@ -175,11 +169,11 @@ class TestDataEditor(
         }
 
         baseRawEditor.scrollingModel.addVisibleAreaListener(
-            VisibleAreaListener { _: VisibleAreaEvent -> syncScrollPosition(baseRawEditor, previewRawEditor) },
+            { _: VisibleAreaEvent -> syncScrollPosition(baseRawEditor, previewRawEditor) },
             disposable
         )
         previewRawEditor.scrollingModel.addVisibleAreaListener(
-            VisibleAreaListener { _: VisibleAreaEvent -> syncScrollPosition(previewRawEditor, baseRawEditor) },
+            { _: VisibleAreaEvent -> syncScrollPosition(previewRawEditor, baseRawEditor) },
             disposable
         )
     }

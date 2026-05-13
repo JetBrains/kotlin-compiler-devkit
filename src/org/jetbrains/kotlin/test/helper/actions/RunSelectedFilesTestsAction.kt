@@ -2,7 +2,6 @@ package org.jetbrains.kotlin.test.helper.actions
 
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.components.service
-import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.gradle.isGradleEnabled
 import org.jetbrains.kotlin.test.helper.isTestDataFile
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService

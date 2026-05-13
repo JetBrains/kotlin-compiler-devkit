@@ -55,7 +55,7 @@ class RelatedFileSearchPathsPanel(project: Project, private val state: PluginSet
             override fun parseSecond(
                 oldValue: List<String>,
                 newValue: String
-            ): List<String>? {
+            ): List<String> {
                 return ParametersListUtil.parse(newValue)
             }
         }

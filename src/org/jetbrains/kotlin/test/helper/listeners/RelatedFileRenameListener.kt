@@ -13,7 +13,6 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import org.jetbrains.kotlin.test.helper.allExtensions
 import org.jetbrains.kotlin.test.helper.asPathWithoutAllExtensions
 import org.jetbrains.kotlin.test.helper.getRelatedTestFiles
-import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.isTestDataFile
 
 val RENAME_KEY = Key.create<Boolean>("org.kotlin.test.helper.renaming")
