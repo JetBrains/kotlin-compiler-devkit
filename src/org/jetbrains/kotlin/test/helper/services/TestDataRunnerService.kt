@@ -20,6 +20,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.actions.CancellationCallback
+import org.jetbrains.kotlin.test.helper.actions.FavoriteTestRunnersService
 import org.jetbrains.kotlin.test.helper.actions.TestDescription
 import org.jetbrains.kotlin.test.helper.actions.filterAndCollectTestDescriptions
 import org.jetbrains.kotlin.test.helper.buildRunnerLabel
@@ -117,11 +118,18 @@ class TestDataRunnerService(
         } else {
             withContext(Dispatchers.EDT) {
                 suspendCancellableCoroutine { continuation ->
+                    val favoriteService = FavoriteTestRunnersService.getInstance()
+                    val sortedKeys = byClass.keys.sortedWith(
+                        compareBy(
+                            { !favoriteService.isFavorite(it) },
+                            { it },
+                        )
+                    ).map { if (favoriteService.isFavorite(it)) "★ $it" else it }
                     val popup = JBPopupFactory.getInstance()
-                        .createPopupChooserBuilder(byClass.keys.sortedBy { it })
+                        .createPopupChooserBuilder(sortedKeys)
                         .setTitle("Select Test Class")
                         .setItemsChosenCallback { selected ->
-                            continuation.resume(selected)
+                            continuation.resume(selected.map { it.removePrefix("★ ") }.toSet())
                         }
                         .addListener(object: JBPopupListener {
                             override fun onClosed(event: LightweightWindowEvent) {

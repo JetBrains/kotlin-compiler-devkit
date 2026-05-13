@@ -69,7 +69,8 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
     }
 
     override fun update(item: String?, presentation: Presentation, popup: Boolean) {
-        presentation.text = item
+        val isFavorite = item != null && FavoriteTestRunnersService.getInstance().isFavorite(item)
+        presentation.text = if (isFavorite) "★ $item" else item
 
         if (item != null) {
             val index = state.methodsClassNames.indexOf(item)
@@ -93,7 +94,17 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                             runAndApply(e, item)
                             setSelectionAndRefresh(item)
                         }
-                    }
+                    },
+                    object : AnAction(
+                        if (isFavorite) "Remove from Favorites" else "Add to Favorites",
+                        null,
+                        AllIcons.Nodes.Favorite,
+                    ) {
+                        override fun actionPerformed(e: AnActionEvent) {
+                            FavoriteTestRunnersService.getInstance().toggleFavorite(item)
+                            state.updateTestsList()
+                        }
+                    },
                 )
             )
         }
@@ -179,7 +190,12 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
                 val runnerLabel = topLevelClass.buildRunnerLabel(testTags)
                 Triple(runnerLabel, group, testMethod)
-            }.sortedBy { it.first }
+            }.sortedWith(
+                compareBy(
+                    { !FavoriteTestRunnersService.getInstance().isFavorite(it.first) },
+                    { it.first },
+                )
+            )
 
             goToAction.testMethods = items.map { it.third }
 
