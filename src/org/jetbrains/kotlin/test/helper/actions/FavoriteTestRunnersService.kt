@@ -18,7 +18,7 @@ class FavoriteTestRunnersService : PersistentStateComponent<FavoriteTestRunnersS
             if (isFavorite) "$FAVORITE_PREFIX$runnerName" else runnerName
     }
 
-    var favoriteRunners: MutableSet<String> = mutableSetOf()
+    private var favoriteRunners: MutableSet<String> = mutableSetOf()
 
     override fun getState(): FavoriteTestRunnersService = this
 
