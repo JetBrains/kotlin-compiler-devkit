@@ -69,6 +69,7 @@
         <multiHostInjector implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataMultiHostInjector"/>
 
         <highlightErrorFilter implementation="org.jetbrains.kotlin.test.helper.codeinsight.TestDataFileHighlightErrorFilter" />
+        <daemon.highlightInfoFilter implementation="org.jetbrains.kotlin.test.helper.codeinsight.TestDataFileHighlightInfoFilter" />
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
