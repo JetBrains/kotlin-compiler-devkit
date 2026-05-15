@@ -380,7 +380,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                     }
                 }
             },
-            object : GradleOnlyAction("Generate, Run, Apply Diffs && Commit", null, AllIcons.Actions.Commit) {
+            object : GradleOnlyAction("Run, Apply Diffs && Commit", null, AllIcons.Actions.Commit) {
                 override fun actionPerformed(e: AnActionEvent) {
                     ActionUtil.performAction(CreateReproducerCommitAction(), e)
                 }

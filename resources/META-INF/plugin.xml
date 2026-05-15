@@ -142,7 +142,7 @@
                     id="CreateReproducerCommit"
                     class="org.jetbrains.kotlin.test.helper.actions.CreateReproducerCommitAction"
                     text="Create Reproducer Commit"
-                    description="Generates tests, runs all tests, applies all diffs and creates a commit with the specified ticket number."
+                    description="Runs all tests, applies all diffs and creates a commit with the specified ticket number."
                     icon="AllIcons.Actions.Commit">
             </action>
         </group>

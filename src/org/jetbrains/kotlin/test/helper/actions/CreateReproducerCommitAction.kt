@@ -43,16 +43,13 @@ class CreateReproducerCommitAction : RunSelectedFilesActionBase() {
         service.scope.launch {
             withBackgroundProgress(project, "Creating Reproducer Commit for $ticketNumber") {
                 reportSequentialProgress { reporter ->
-                    reporter.nextStep(25) {
+                    reporter.nextStep(33) {
                         for (file in files) {
                             file.insertTicketNumberIfNecessary(ticketNumber, project)
                         }
                     }
 
-                    reporter.nextStep(50, "Generating Tests") {
-                        generateTestsAndWait(project, files)
-                    }
-                    reporter.nextStep(75, "Running Tests and Applying Diffs") {
+                    reporter.nextStep(66, "Running Tests and Applying Diffs") {
                         runTestAndApplyDiffLoop(project) { service.doCollectAndRunAllTests(e, files, debug = false) }
                     }
 
