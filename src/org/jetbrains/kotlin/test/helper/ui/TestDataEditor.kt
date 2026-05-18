@@ -56,7 +56,7 @@ class TestDataEditor(
 
     private lateinit var editorViewMode: EditorViewMode
     lateinit var chooseAdditionalFileAction: ChooseAdditionalFileAction
-    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(name + "SplitVertical", true)
+    private var isVerticalSplit = PropertiesComponent.getInstance().getBoolean(name + "SplitVertical", false)
 
     private var scrollSyncDisposable: Disposable? = null
     private var isSyncingScroll = false
