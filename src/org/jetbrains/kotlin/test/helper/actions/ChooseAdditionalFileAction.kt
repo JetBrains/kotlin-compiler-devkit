@@ -98,7 +98,7 @@ class ChooseAdditionalFileAction(
         AllIcons.Actions.Diff
     ), DumbAware {
         override fun update(e: AnActionEvent) {
-            e.presentation.isEnabled = previewEditorState.currentPreview.file.let { it != null && it != testDataEditor.file }
+            e.presentation.isEnabledAndVisible = previewEditorState.currentPreview.file.let { it != null && it != testDataEditor.file }
         }
 
         override fun actionPerformed(e: AnActionEvent) {

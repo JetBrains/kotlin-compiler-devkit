@@ -199,6 +199,11 @@ class TestDataEditor(
         "Split editors horizontally",
         AllIcons.Actions.SplitHorizontally
     ) {
+        override fun update(e: AnActionEvent) {
+            super.update(e)
+            e.presentation.isEnabledAndVisible = editorViewMode == EditorViewMode.BaseAndAdditionalEditor
+        }
+
         override fun isSelected(e: AnActionEvent): Boolean = isVerticalSplit
 
         override fun setSelected(e: AnActionEvent, state: Boolean) {
