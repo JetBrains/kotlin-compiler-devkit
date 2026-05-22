@@ -70,6 +70,14 @@
 
         <highlightErrorFilter implementation="org.jetbrains.kotlin.test.helper.codeinsight.TestDataFileHighlightErrorFilter" />
         <daemon.highlightInfoFilter implementation="org.jetbrains.kotlin.test.helper.codeinsight.TestDataFileHighlightInfoFilter" />
+
+        <localInspection language="kotlin"
+                         groupName="Kotlin"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.kotlin.test.helper.inspections.SuspiciousWhenOverConeKotlinTypeInspection"
+                         displayName="Suspicious 'when' over 'ConeKotlinType'."
+                     />
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
