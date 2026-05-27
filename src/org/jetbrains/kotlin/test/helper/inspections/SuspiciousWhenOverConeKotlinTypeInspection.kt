@@ -57,10 +57,12 @@ class SuspiciousWhenOverConeKotlinTypeInspection : LocalInspectionTool() {
                 if (expression.entries.none { entry -> entry.conditions.any { it is KtWhenConditionIsPattern } }) return
 
                 analyze(expression) {
-                    if (subjectExpression.expressionType?.isSubtypeOf(CLASS_ID_CONE_KOTLIN_TYPE) != true) return@analyze
+                    val subjectType = subjectExpression.expressionType
+                    if (subjectType?.isSubtypeOf(CLASS_ID_CONE_KOTLIN_TYPE) != true) return@analyze
                     if (elseExpression !is KtReturnExpression && elseExpression.expressionType?.isNothingType == true) return@analyze
 
                     val missingBranches = buildMissingTypeList()
+                    missingBranches.removeIf { !it.isSubtypeOf(subjectType) }
 
                     for (entry in expression.entries) {
                         for (condition in entry.conditions) {
