@@ -78,6 +78,10 @@
                          implementationClass="org.jetbrains.kotlin.test.helper.inspections.SuspiciousWhenOverConeKotlinTypeInspection"
                          displayName="Suspicious 'when' over 'ConeKotlinType'."
                      />
+
+        <findUsagesHandlerFactory
+                implementation="org.jetbrains.kotlin.test.helper.findusages.FirElementFindUsagesHandlerFactory"
+                order="first"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
