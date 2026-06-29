@@ -6,6 +6,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.isFile
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifierListOwner
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.search.GlobalSearchScope
@@ -60,8 +61,11 @@ fun VirtualFile.collectTestDescriptions(
             .firstNotNullOfOrNull { parent ->
                 parent.collectTestMethodsIfTestData(project)
                     .mapNotNull {
-                        val klass = it as? PsiClass ?: return@mapNotNull null
-                        TestDescription.GeneratedOnTheFly(klass, this, parent)
+                        when (it) {
+                            is PsiClass -> TestDescription.GeneratedOnTheFly(it, this, parent)
+                            is PsiMethod -> TestDescription.ExistingTest(it)
+                            else -> null
+                        }
                     }
                     .ifEmpty { null }
             }

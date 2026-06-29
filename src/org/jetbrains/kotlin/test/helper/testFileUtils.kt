@@ -43,7 +43,10 @@ fun VirtualFile.isSupportedByExtension(): Boolean = extension in SUPPORTED_EXTEN
 fun VirtualFile?.getTestDataType(project: Project): TestDataType? {
     if (this == null) return null
     val configuration = TestDataPathsConfiguration.getInstance(project)
-    if (configuration.testDataDirectories.any { path.startsWith(it) }) return TestDataType.Directory
+    val matchingTestDataDirectory = configuration.testDataDirectories.firstOrNull { path.startsWith(it) }
+    if (matchingTestDataDirectory != null) {
+        return if (path == matchingTestDataDirectory) TestDataType.DirectoryOfFiles else TestDataType.Directory
+    }
     if (configuration.testDataFiles.any { path.startsWith(it) }) {
         return when {
             isSupportedByExtension() -> TestDataType.File
