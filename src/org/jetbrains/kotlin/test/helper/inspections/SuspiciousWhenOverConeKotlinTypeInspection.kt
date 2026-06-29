@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.analysis.api.types.symbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtVisitorVoid
 import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
@@ -53,7 +54,9 @@ class SuspiciousWhenOverConeKotlinTypeInspection : LocalInspectionTool() {
         return object : KtVisitorVoid() {
             override fun visitWhenExpression(expression: KtWhenExpression) {
                 val elseExpression = expression.elseExpression ?: return
-                val subjectExpression = expression.subjectExpression ?: return
+                val subjectExpression = (expression.subjectExpression)?.let {
+                    if (it is KtProperty) it.initializer else it
+                } ?: return
                 if (expression.entries.none { entry -> entry.conditions.any { it is KtWhenConditionIsPattern } }) return
 
                 analyze(expression) {
@@ -75,7 +78,12 @@ class SuspiciousWhenOverConeKotlinTypeInspection : LocalInspectionTool() {
 
                     if (missingBranches.isNotEmpty()) {
                         @OptIn(KaExperimentalApi::class)
-                        val renderedMissing = missingBranches.joinToString { it.render(KaTypeRendererForSource.WITH_SHORT_NAMES, Variance.INVARIANT) }
+                        val renderedMissing = missingBranches.joinToString {
+                            it.render(
+                                KaTypeRendererForSource.WITH_SHORT_NAMES,
+                                Variance.INVARIANT
+                            )
+                        }
 
                         holder.registerProblem(
                             subjectExpression,
