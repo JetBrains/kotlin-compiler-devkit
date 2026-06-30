@@ -59,6 +59,10 @@
                 implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFoldingBuilder"
                 language=""/>
 
+        <lang.foldingBuilder
+                implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.KotlinTestDataSteppingFoldingBuilder"
+                language="kotlin"/>
+
         <fileType name="MultifileTestData" implementationClass="org.jetbrains.kotlin.test.helper.lang.MultifileTestDataFileType"
                   fieldName="INSTANCE" language="multifileTestData"/>
 
