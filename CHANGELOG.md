@@ -2,6 +2,9 @@
 
 # Changelog
 
+## 1.0.68
+- Support folding of `// EXPECTATIONS` groups in stepping tests
+
 ## 1.0.67
 - Support `--incremental` flag in `manageTestDataGlobally` command via new `Update Test Data (Incremental)` action.
 
