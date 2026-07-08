@@ -39,5 +39,5 @@ abstract class KotlinMasterAction : GitSingleBranchAction() {
         remotes.any { it.isPublicKotlinMonorepo() }
 
     private fun GitRemote.isPublicKotlinMonorepo() =
-        this.urls.any { it.removePrefix("ssh://").removePrefix("https://") in Git.KOTLIN_MONOREPO_REMOTES }
+        this.urls.any { it.matches(Git.KOTLIN_MONOREPO_REMOTE) }
 }

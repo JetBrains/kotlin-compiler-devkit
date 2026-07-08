@@ -27,12 +27,12 @@ object Git {
     const val MAIN_BRANCH = "master"
     const val DEFAULT_ORIGIN = "origin"
 
-    val KOTLIN_MONOREPO_REMOTES = setOf(
-        "git@github.com:JetBrains/kotlin.git",
-        "github.com/JetBrains/kotlin.git",
-        "git@git.jetbrains.team/kt/kotlin.git",
-        "git.jetbrains.team/kt/kotlin.git",
-    )
+    val KOTLIN_MONOREPO_REMOTE = Regex(
+        "(ssh://|https://)?(git@)?" +
+        "((github\\.com[:/]JetBrains/kotlin)|" +
+        "(git\\.jetbrains\\.team/kt/kotlin))" +
+        "(\\.git)?")
+
 
     context(project: Project)
     suspend fun rebaseOnGreenMasterCommit(repository: GitRepository) {
