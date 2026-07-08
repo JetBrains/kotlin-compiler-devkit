@@ -16,7 +16,7 @@ class TestDataManagerGroup : DefaultActionGroup() {
     override fun update(e: AnActionEvent) {
         val project = e.project
         e.presentation.isEnabledAndVisible =
-            e.hasSelectedTestDataFiles && project?.hasManageTestDataGloballyTask == true
+            e.hasSelectedTestDataFiles && project?.hasTestDataManagerTasks == true
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -25,14 +25,11 @@ class TestDataManagerGroup : DefaultActionGroup() {
 /**
  * The base class for actions that manage test data.
  *
- * No need to check [hasManageTestDataGloballyTask] explicitly since [TestDataManagerGroup] does it for us.
+ * No need to check [hasTestDataManagerTasks] explicitly since [TestDataManagerGroup] does it for us.
  */
 abstract class TestDataManagerActionBase : RunSelectedFilesActionBase() {
     protected fun runTestDataManager(project: Project, configure: TestDataManagerCommandBuilder.() -> Unit = {}) {
-        val builder = TestDataManagerCommandBuilder().apply {
-            updateTestDataIsAvailable = project.hasUpdateTestDataTask
-            configure()
-        }
+        val builder = TestDataManagerCommandBuilder().apply(configure)
 
         runGradleCommandLine(
             project = project,
@@ -47,10 +44,13 @@ abstract class TestDataManagerActionBase : RunSelectedFilesActionBase() {
     }
 }
 
-val Project.hasManageTestDataGloballyTask: Boolean
-    get() = hasGradleTask("manageTestDataGlobally")
-
-val Project.hasUpdateTestDataTask: Boolean
+/**
+ * Whether the linked Gradle project ships the test data manager tasks (`checkTestData` and
+ * `updateTestData`, registered together by the `test-data-manager` convention plugin).
+ *
+ * We probe `updateTestData` because it has existed for longer than the newer `checkTestData`.
+ */
+val Project.hasTestDataManagerTasks: Boolean
     get() = hasGradleTask("updateTestData")
 
 /**

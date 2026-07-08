@@ -177,35 +177,35 @@
                     id="TestDataManagerUpdateAllTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateAction"
                     text="Update Test Data"
-                    description="Updates test data for the selected files using :updateTestData when available, otherwise falls back to :manageTestDataGlobally with update mode"
+                    description="Updates test data for the selected files by running the :updateTestData Gradle task"
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action
                     id="TestDataManagerUpdateGoldenTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateGoldenAction"
                     text="Update Test Data (Golden Only)"
-                    description="Updates only the golden test data for the selected files using :updateTestData when available, otherwise falls back to :manageTestDataGlobally with update mode"
+                    description="Updates only the golden test data for the selected files by running the :updateTestData Gradle task"
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action
                     id="TestDataManagerUpdateIncrementalAction"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerUpdateIncrementalAction"
                     text="Update Test Data (Incremental)"
-                    description="Updates test data for the selected files; alternative tests run only if the golden one had changes. Uses :updateTestData when available, otherwise falls back to :manageTestDataGlobally with update mode"
+                    description="Updates test data for the selected files; alternative tests run only if the golden one had changes. Runs the :updateTestData Gradle task"
                     icon="AllIcons.Diff.ApplyNotConflicts">
             </action>
             <action
                     id="TestDataManagerCheckAllTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerCheckAction"
                     text="Check Test Data"
-                    description="Runs :manageTestDataGlobally with check mode for selected files"
+                    description="Runs the :checkTestData Gradle task for the selected files"
                     icon="AllIcons.Actions.RunAll">
             </action>
             <action
                     id="TestDataManagerCheckGoldenTests"
                     class="org.jetbrains.kotlin.test.helper.actions.test.data.manager.TestDataManagerCheckGoldenAction"
                     text="Check Test Data (Golden Only)"
-                    description="Runs :manageTestDataGlobally with check mode for selected golden files"
+                    description="Runs the :checkTestData Gradle task for the selected golden files"
                     icon="AllIcons.Actions.RunAll">
             </action>
         </group>
