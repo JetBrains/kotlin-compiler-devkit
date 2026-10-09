@@ -78,6 +78,16 @@
 
         <fileTypeOverrider implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFileTypeOverrider"/>
 
+        <fileType name="KotlinIrDump" implementationClass="org.jetbrains.kotlin.test.helper.lang.ir.IrDumpFileType"
+                  fieldName="INSTANCE" language="KotlinIrDump" patterns="*.ir.txt"/>
+
+        <lang.parserDefinition language="KotlinIrDump" implementationClass="org.jetbrains.kotlin.test.helper.lang.ir.IrDumpParserDefinition"/>
+
+        <lang.syntaxHighlighterFactory language="KotlinIrDump"
+                                       implementationClass="org.jetbrains.kotlin.test.helper.lang.ir.IrDumpSyntaxHighlighterFactory"/>
+
+        <colorSettingsPage implementation="org.jetbrains.kotlin.test.helper.lang.ir.IrDumpColorSettingsPage"/>
+
         <multiHostInjector implementation="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataMultiHostInjector"/>
 
         <highlightErrorFilter implementation="org.jetbrains.kotlin.test.helper.codeinsight.TestDataFileHighlightErrorFilter" />
