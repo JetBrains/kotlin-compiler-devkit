@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.test.helper
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
@@ -36,6 +37,7 @@ class PluginSettingsState(
     var multifilePartsSeparator: Boolean,
     var injectMultifileTestDataFileType: Boolean,
     var directiveClassId: String,
+    var testFederationGutterMarkersEnabled: Boolean,
 )
 
 internal val defaultIgnoredLanguagesForInjection: List<String> =
@@ -71,6 +73,8 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
 
     var directiveClassId: String = defaultDirectiveClassId
 
+    var testFederationGutterMarkersEnabled: Boolean = true
+
     override fun getState(): TestDataPathsConfiguration {
         return this
     }
@@ -84,6 +88,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
             state.ignoredLanguagesForInjection,
             state.multifilePartsSeparator,
             state.directiveClassId,
+            state.testFederationGutterMarkersEnabled,
         )
     }
 
@@ -95,6 +100,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newIgnoredLanguagesForInjection: List<String>,
         newMultifilePartsSeparator: Boolean,
         newDirectiveClassId: String,
+        newTestFederationGutterMarkersEnabled: Boolean = true,
     ) {
         loadState(
             newTestDataFiles.map { it.path }.toTypedArray(),
@@ -110,6 +116,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
             newIgnoredLanguagesForInjection.toTypedArray(),
             newMultifilePartsSeparator,
             newDirectiveClassId,
+            newTestFederationGutterMarkersEnabled,
         )
     }
 
@@ -121,6 +128,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         newIgnoredLanguagesForInjection: Array<String>,
         newMultifilePartsSeparator: Boolean,
         newDirectiveClassId: String,
+        newTestFederationGutterMarkersEnabled: Boolean,
     ) {
         testDataFiles = newTestDataFiles.copyOf()
         testDataDirectories = newTestDataDirectories.copyOf()
@@ -129,6 +137,7 @@ class TestDataPathsConfiguration : PersistentStateComponent<TestDataPathsConfigu
         ignoredLanguagesForInjection = newIgnoredLanguagesForInjection.copyOf()
         multifilePartsSeparator = newMultifilePartsSeparator
         directiveClassId = newDirectiveClassId
+        testFederationGutterMarkersEnabled = newTestFederationGutterMarkersEnabled
     }
 
     /**
@@ -201,6 +210,7 @@ class TestDataPathsConfigurable(private val project: Project) :
         multifilePartsSeparator = resetMultifilePartsSeparator(),
         injectMultifileTestDataFileType = resetInjectMultifileTestDataFileType(),
         directiveClassId = resetDirectiveClassId(),
+        testFederationGutterMarkersEnabled = resetTestFederationGutterMarkersEnabled(),
     )
 
     private var testDataFiles: MutableList<VirtualFile>
@@ -234,6 +244,10 @@ class TestDataPathsConfigurable(private val project: Project) :
     private var directiveClassId: String
         get() = state.directiveClassId
         set(value) { state.directiveClassId = value }
+
+    private var testFederationGutterMarkersEnabled: Boolean
+        get() = state.testFederationGutterMarkersEnabled
+        set(value) { state.testFederationGutterMarkersEnabled = value }
 
     // -------------------------------- state initialization --------------------------------
 
@@ -271,6 +285,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         return configuration.directiveClassId
     }
 
+    private fun resetTestFederationGutterMarkersEnabled(): Boolean {
+        return configuration.testFederationGutterMarkersEnabled
+    }
+
     // -------------------------------- panels --------------------------------
 
     private val testDataFilesPathPanel: TestDataPathEntriesPanel by lazy {
@@ -305,6 +323,14 @@ class TestDataPathsConfigurable(private val project: Project) :
         JBCheckBox("Inject multifile test data file type in test data files", state.injectMultifileTestDataFileType).apply {
             addChangeListener {
                 state.injectMultifileTestDataFileType = isSelected
+            }
+        }
+    }
+
+    private val testFederationGutterMarkersCheckbox: JBCheckBox by lazy {
+        JBCheckBox("Show Test Federation icons in the gutter", state.testFederationGutterMarkersEnabled).apply {
+            addChangeListener {
+                state.testFederationGutterMarkersEnabled = isSelected
             }
         }
     }
@@ -347,6 +373,9 @@ class TestDataPathsConfigurable(private val project: Project) :
             }
             row {
                 cell(injectMultifileTestDataFileTypeCheckbox)
+            }
+            row {
+                cell(testFederationGutterMarkersCheckbox)
             }
             row("Directive class id:") {
                 cell(directiveClassIdField).align(AlignX.FILL)
@@ -401,6 +430,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         return configuration.directiveClassId != directiveClassId
     }
 
+    private fun testFederationGutterMarkersModified(): Boolean {
+        return configuration.testFederationGutterMarkersEnabled != testFederationGutterMarkersEnabled
+    }
+
     override fun isModified(): Boolean {
         return testDataModified(isFiles = true) ||
             testDataModified(isFiles = false) ||
@@ -409,7 +442,8 @@ class TestDataPathsConfigurable(private val project: Project) :
             ignoredLanguagesForInjectionModified() ||
             multifilePartsSeparatorModified() ||
             injectMultifileTestDataFileTypeModified() ||
-            directiveClassIdModified()
+            directiveClassIdModified() ||
+            testFederationGutterMarkersModified()
     }
 
     override fun reset() {
@@ -422,8 +456,10 @@ class TestDataPathsConfigurable(private val project: Project) :
         multifilePartsSeparator = resetMultifilePartsSeparator()
         injectMultifileTestDataFileType = resetInjectMultifileTestDataFileType()
         directiveClassId = resetDirectiveClassId()
+        testFederationGutterMarkersEnabled = resetTestFederationGutterMarkersEnabled()
         multifilePartsSeparatorCheckbox.isSelected = multifilePartsSeparator
         injectMultifileTestDataFileTypeCheckbox.isSelected = injectMultifileTestDataFileType
+        testFederationGutterMarkersCheckbox.isSelected = testFederationGutterMarkersEnabled
         directiveClassIdField.text = directiveClassId
         (testDataFilesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
         (testDataDirectoriesPathPanel.myTable.model as? AbstractTableModel)?.fireTableDataChanged()
@@ -434,6 +470,8 @@ class TestDataPathsConfigurable(private val project: Project) :
 
     override fun apply() {
         super.apply()
+        val testFederationGutterMarkersChanged =
+            configuration.testFederationGutterMarkersEnabled != testFederationGutterMarkersEnabled
         configuration.loadState(
             testDataFiles,
             testDataDirectories,
@@ -442,7 +480,11 @@ class TestDataPathsConfigurable(private val project: Project) :
             ignoredLanguagesForInjection,
             multifilePartsSeparator,
             directiveClassId,
+            testFederationGutterMarkersEnabled,
         )
+        if (testFederationGutterMarkersChanged) {
+            DaemonCodeAnalyzer.getInstance(project).restart("test-federation gutter marker setting changed")
+        }
         workspaceConfiguration.injectMultifileTestDataFileType = injectMultifileTestDataFileType
     }
 }
