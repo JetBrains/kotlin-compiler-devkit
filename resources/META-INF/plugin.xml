@@ -60,6 +60,9 @@
         <codeInsight.lineMarkerProvider
                 implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataLineMarkerProvider"
                 language=""/>
+        <codeInsight.lineMarkerProvider
+                implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.TestFederationLineMarkerProvider"
+                language="kotlin"/>
 
         <lang.foldingBuilder
                 implementationClass="org.jetbrains.kotlin.test.helper.codeinsight.MultifileTestDataFoldingBuilder"
