@@ -21,6 +21,7 @@ import com.intellij.psi.PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME as ANNOTATI
 private const val JUNIT_TAG = "org.junit.jupiter.api.Tag"
 private const val JUNIT_TAGS = "org.junit.jupiter.api.Tags"
 private const val SMOKE_TAG = "smoke"
+private const val NIGHTLY_TAG = "nightly"
 private const val CONTRACT_TAG_PREFIX = "contract:"
 private const val RESERVED_TAG_CHARACTERS = ",()&|!"
 private val standardAnnotationPackages = listOf("java.lang.annotation.", "kotlin.annotation.", "kotlin.jvm.")
@@ -28,12 +29,17 @@ private val standardAnnotationPackages = listOf("java.lang.annotation.", "kotlin
 internal data class TestFederationSchedule(
     val smoke: Boolean = false,
     val contractDomains: Set<String> = emptySet(),
+    val nightly: Boolean = false,
 )
 
-internal fun TestFederationSchedule.isEmpty(): Boolean = !smoke && contractDomains.isEmpty()
+internal fun TestFederationSchedule.isEmpty(): Boolean = !smoke && !nightly && contractDomains.isEmpty()
 
 internal operator fun TestFederationSchedule.plus(other: TestFederationSchedule): TestFederationSchedule =
-    TestFederationSchedule(smoke || other.smoke, contractDomains + other.contractDomains)
+    TestFederationSchedule(
+        smoke = smoke || other.smoke,
+        contractDomains = contractDomains + other.contractDomains,
+        nightly = nightly || other.nightly,
+    )
 
 internal fun PsiModifierListOwner.directTestFederationSchedule(): TestFederationSchedule =
     declaredFederationTags(hashSetOf()).toSchedule()
@@ -135,5 +141,6 @@ private fun List<String>.toSchedule(): TestFederationSchedule {
         smoke = SMOKE_TAG in tags,
         contractDomains = tags.filter { it.startsWith(CONTRACT_TAG_PREFIX) }
             .map { it.removePrefix(CONTRACT_TAG_PREFIX) }.filter { it.isNotEmpty() }.toSet(),
+        nightly = NIGHTLY_TAG in tags,
     )
 }

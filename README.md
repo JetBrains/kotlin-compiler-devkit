@@ -129,6 +129,24 @@ All pending local changes are automatically stashed.
 Resets the `master` branch to the latest successfully built commit.
 Doesn't modify or change the current branch.
 
+### Test Federation Gutter Icons
+
+Tagged JUnit Jupiter test classes and functions get a gutter icon that indicates when the test is run. Smoke and
+contract tests get a shield because they guard correctness before merging. Nightly tests get a sleeping moon because
+their check is deferred:
+
+- **Nightly** (`@Tag("nightly")`, e.g. `@NightlyTest`): skipped in remote and safe-merge runs; runs in nightly builds
+  and, by default, in local Gradle runs
+- **Smoke** (`@Tag("smoke")`, e.g. `@MustRunAlways`): required regardless of what changed
+- **Contract** (`@Tag("contract:<Domain>")`, e.g. `@MustRunOnChangesIn…`): required when the given domain changes
+
+Tags are also picked up from composed annotations, base classes and `@Nested` parent classes. If a test has several
+kinds of tags, only one icon is shown: nightly takes priority over smoke, and smoke over contract. Tests in a tagged
+class get the icon too. Click the icon to see a popup that lists every reason the test runs.
+
+To hide the icons, uncheck "Show Test Federation icons in the gutter" in the plugin settings, or right-click an icon and
+choose "Hide Test Federation icons in this project".
+
 <!-- Plugin description end -->
 
 ## Build plugin from sources

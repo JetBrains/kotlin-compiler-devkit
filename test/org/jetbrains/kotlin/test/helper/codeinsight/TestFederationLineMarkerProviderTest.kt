@@ -443,6 +443,202 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         assertNull(marker(file.function("invalidInnerTest")))
     }
 
+    fun testNightlyTestFunctionsAndClassesReceiveNightlyMarkers() {
+        val file = parse(
+            """
+            package sample
+
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Tag
+            import org.junit.jupiter.api.Test
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS)
+            @NightlyTest
+            annotation class SlowNightly
+
+            class FunctionLevelTest {
+                @Test
+                @NightlyTest
+                fun nightlyFunction() {}
+
+                @Test
+                @Tag("nightly")
+                fun directlyTaggedFunction() {}
+
+                @NightlyTest
+                fun nightlyButNotATest() {}
+            }
+
+            @NightlyTest
+            class ClassLevelTest {
+                @Test
+                fun classScheduleOnly() {}
+            }
+
+            @SlowNightly
+            abstract class AbstractNightlyBase {
+                @Test
+                fun inheritedTest() {}
+            }
+
+            class ConcreteNightlyTest : AbstractNightlyBase()
+            """.trimIndent(),
+        )
+
+        val nightlyFunction = file.function("nightlyFunction")
+        assertMarkerIcon(marker(nightlyFunction), "/icons/test_federation_nightly.svg")
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationMarkerSchedule(nightlyFunction))
+        assertEquals(
+            listOf(
+                "Nightly test: skipped in remote and safe-merge runs; runs in nightly builds and local Gradle runs " +
+                    "by default. Not required for merging. Other test filters still apply.",
+            ),
+            formatTestFederationSchedule(getTestFederationSchedule(nightlyFunction)),
+        )
+        assertMarkerIcon(marker(file.function("directlyTaggedFunction")), "/icons/test_federation_nightly.svg")
+        assertNull(marker(file.function("nightlyButNotATest")))
+        assertNull(marker(file.ktClass("FunctionLevelTest")))
+
+        assertMarkerIcon(marker(file.ktClass("ClassLevelTest")), "/icons/test_federation_nightly.svg")
+        assertNull(marker(file.function("classScheduleOnly")))
+
+        assertNull(marker(file.ktClass("AbstractNightlyBase")))
+        val concreteClass = file.ktClass("ConcreteNightlyTest")
+        assertMarkerIcon(marker(concreteClass), "/icons/test_federation_nightly.svg")
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationMarkerSchedule(concreteClass))
+    }
+
+    fun testNightlyIconTakesPriorityAndPopupListsNightlyFirst() {
+        val file = parse(
+            """
+            package sample
+
+            import org.jetbrains.kotlin.testFederation.MustRunAlways
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Tag
+            import org.junit.jupiter.api.Test
+
+            @NightlyTest
+            class NightlyClassTest {
+                @Test
+                @MustRunAlways
+                @Tag("contract:Native")
+                @Tag("contract:Js")
+                fun everything() {}
+
+                @Test
+                @Tag("contract:Jvm")
+                fun contractInNightlyClass() {}
+            }
+
+            @MustRunAlways
+            class SmokeClassTest {
+                @Test
+                @NightlyTest
+                fun nightlyInSmokeClass() {}
+
+                @Test
+                @Tag("contract:Js")
+                fun contractInSmokeClass() {}
+            }
+            """.trimIndent(),
+        )
+
+        val nightlyLine = "Nightly test: skipped in remote and safe-merge runs; runs in nightly builds and local Gradle " +
+            "runs by default. Not required for merging. Other test filters still apply."
+        val smokeLine = "Smoke test: required regardless of what changed. Other test filters still apply."
+
+        val everything = file.function("everything")
+        assertMarkerIcon(marker(everything), "/icons/test_federation_nightly.svg")
+        val everythingSchedule = getTestFederationMarkerSchedule(everything)!!
+        assertEquals(
+            TestFederationSchedule(smoke = true, contractDomains = setOf("Js", "Native"), nightly = true),
+            everythingSchedule,
+        )
+        assertEquals(
+            listOf(
+                nightlyLine,
+                smokeLine,
+                "Contract test for Js: required when Js changes or when this test's own domain needs testing.",
+                "Contract test for Native: required when Native changes or when this test's own domain needs testing.",
+            ),
+            formatTestFederationSchedule(everythingSchedule),
+        )
+
+        val contractInNightlyClass = file.function("contractInNightlyClass")
+        assertMarkerIcon(marker(contractInNightlyClass), "/icons/test_federation_nightly.svg")
+        assertEquals(
+            listOf(
+                nightlyLine,
+                "Contract test for Jvm: required when Jvm changes or when this test's own domain needs testing.",
+            ),
+            formatTestFederationSchedule(getTestFederationMarkerSchedule(contractInNightlyClass)!!),
+        )
+        assertMarkerIcon(marker(file.ktClass("NightlyClassTest")), "/icons/test_federation_nightly.svg")
+
+        val nightlyInSmokeClass = file.function("nightlyInSmokeClass")
+        assertMarkerIcon(marker(nightlyInSmokeClass), "/icons/test_federation_nightly.svg")
+        assertEquals(
+            listOf(nightlyLine, smokeLine),
+            formatTestFederationSchedule(getTestFederationMarkerSchedule(nightlyInSmokeClass)!!),
+        )
+        assertMarkerIcon(marker(file.function("contractInSmokeClass")), "/icons/test_federation_smoke.svg")
+        assertMarkerIcon(marker(file.ktClass("SmokeClassTest")), "/icons/test_federation_smoke.svg")
+    }
+
+    fun testHidingIconsSuppressesNightlyMarkersUntilReenabled() {
+        addTestAnnotations()
+        val file = myFixture.configureByText(
+            "NightlyScheduleTest.kt",
+            """
+            package sample
+
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Tag
+            import org.junit.jupiter.api.Test
+
+            @NightlyTest
+            class NightlyScheduleTest {
+                @Test
+                @Tag("smoke")
+                fun scheduled() {}
+
+                @Test
+                fun classScheduleOnly() {}
+            }
+            """.trimIndent(),
+        ) as KtFile
+
+        myFixture.doHighlighting()
+        val lineMarkers = federationLineMarkers().sortedBy { it.startOffset }
+        assertEquals(listOf(7, 10), lineMarkers.map { myFixture.editor.document.getLineNumber(it.startOffset) })
+        assertEquals(
+            listOf(icon("/icons/test_federation_nightly.svg"), icon("/icons/test_federation_nightly.svg")),
+            lineMarkers.map { it.createGutterRenderer()!!.icon },
+        )
+
+        val classMarker = marker(file.ktClass("NightlyScheduleTest"))!!
+        val actionGroup = classMarker.createGutterRenderer()!!.popupMenuActions as DefaultActionGroup
+        val disableAction = actionGroup.childActionsOrStubs.single()
+        ActionManager.getInstance().tryToExecute(disableAction, null, null, ActionPlaces.UNKNOWN, true)
+
+        val configuration = TestDataPathsConfiguration.getInstance(project)
+        assertFalse(configuration.testFederationGutterMarkersEnabled)
+        myFixture.doHighlighting()
+        assertTrue(federationLineMarkers().isEmpty())
+        assertNull(marker(file.function("scheduled")))
+
+        val configurable = TestDataPathsConfigurable(project)
+        val checkbox = configurable.createComponent().findCheckBox("Show Test Federation icons in the gutter")!!
+        assertFalse(checkbox.isSelected)
+        checkbox.isSelected = true
+        configurable.apply()
+        assertTrue(configuration.testFederationGutterMarkersEnabled)
+        myFixture.doHighlighting()
+        assertEquals(2, federationLineMarkers().size)
+        configurable.disposeUIResources()
+    }
+
     private fun parse(text: String): KtFile {
         addTestAnnotations()
         return myFixture.addFileToProject("sample/ScheduledTest.kt", text) as KtFile
@@ -463,6 +659,10 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
             @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
             @Tag("contract:Js")
             annotation class MustRunOnChangesInJs
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            @Tag("nightly")
+            annotation class NightlyTest
             """.trimIndent(),
         )
         addJUnitAnnotations()
