@@ -117,15 +117,31 @@ private fun showSchedulePopup(event: MouseEvent, schedule: TestFederationSchedul
 }
 
 internal fun getTestFederationMarkerSchedule(declaration: KtNamedDeclaration): TestFederationSchedule? =
+    getTestFederationDeclarationSchedule(declaration)?.effective
+
+/**
+ * [own] is declared on the test function, or on the test class and its supertypes;
+ * [inherited] comes from the containing test class, or from the enclosing classes of a `@Nested` class.
+ */
+internal class TestFederationDeclarationSchedule(
+    val own: TestFederationSchedule,
+    val inherited: TestFederationSchedule,
+) {
+    val effective: TestFederationSchedule = own + inherited
+}
+
+internal fun getTestFederationDeclarationSchedule(declaration: KtNamedDeclaration): TestFederationDeclarationSchedule? =
     CachedValuesManager.getCachedValue(declaration) {
         CachedValueProvider.Result.create(
-            computeTestFederationMarkerSchedule(declaration),
+            computeTestFederationDeclarationSchedule(declaration),
             PsiModificationTracker.MODIFICATION_COUNT,
             ProjectRootModificationTracker.getInstance(declaration.project),
         )
     }
 
-private fun computeTestFederationMarkerSchedule(declaration: KtNamedDeclaration): TestFederationSchedule? {
+private fun computeTestFederationDeclarationSchedule(
+    declaration: KtNamedDeclaration,
+): TestFederationDeclarationSchedule? {
     val schedule = when (declaration) {
         is KtNamedFunction -> {
             if (declaration.annotationEntries.isEmpty() || declaration.parent !is KtClassBody) return null
@@ -133,22 +149,36 @@ private fun computeTestFederationMarkerSchedule(declaration: KtNamedDeclaration)
             val testClass = method.containingClass ?: return null
             if (!testClass.isJupiterTestContainer() || !testClass.hasJupiterFramework()) return null
             if (!method.isJupiterTestMethod()) return null
-            val direct = method.directTestFederationSchedule()
-            // Class-only schedules already have a class marker; method popups still include them.
-            if (direct.isEmpty()) return null
-            direct + testClass.testFederationSchedule()
+            // Tests also get a marker when their schedule comes only from the class.
+            TestFederationDeclarationSchedule(
+                method.directTestFederationSchedule(),
+                testClass.cachedTestFederationSchedule(),
+            )
         }
 
         is KtClass -> {
             val testClass = declaration.toLightClass() ?: return null
             if (!testClass.isJupiterTestClass()) return null
-            testClass.testFederationSchedule()
+            TestFederationDeclarationSchedule(
+                testClass.ownTestFederationSchedule(),
+                testClass.enclosingTestFederationSchedule(),
+            )
         }
 
         else -> return null
     }
-    return schedule.takeUnless { it.isEmpty() }
+    return schedule.takeUnless { it.effective.isEmpty() }
 }
+
+// Every test method needs its class schedule, so compute it once per class.
+private fun PsiClass.cachedTestFederationSchedule(): TestFederationSchedule =
+    CachedValuesManager.getCachedValue(this) {
+        CachedValueProvider.Result.create(
+            testFederationSchedule(),
+            PsiModificationTracker.MODIFICATION_COUNT,
+            ProjectRootModificationTracker.getInstance(project),
+        )
+    }
 
 // This public API already caches framework discovery, including Kotlin support.
 private fun PsiClass.hasJupiterFramework(): Boolean =

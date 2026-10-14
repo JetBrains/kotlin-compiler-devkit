@@ -147,6 +147,10 @@ class get the icon too. Click the icon to see a popup that lists every reason th
 To hide the icons, uncheck "Show Test Federation icons in the gutter" in the plugin settings, or right-click an icon and
 choose "Hide Test Federation icons in this project".
 
+Conflicting schedules are reported as warnings: contract tags on a smoke test are redundant, and a nightly tag skips the
+smoke or contract schedule before merging. Suppress them with `@Suppress("TestFederationRedundantContract")` or
+`@Suppress("TestFederationNightlyConflict")` (also offered via Alt+Enter), or disable the inspections in the settings.
+
 <!-- Plugin description end -->
 
 ## Build plugin from sources

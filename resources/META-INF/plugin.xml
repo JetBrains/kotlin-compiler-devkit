@@ -104,6 +104,22 @@
                          displayName="Suspicious 'when' over 'ConeKotlinType'."
                      />
 
+        <localInspection language="kotlin"
+                         groupName="Kotlin"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         shortName="TestFederationRedundantContract"
+                         implementationClass="org.jetbrains.kotlin.test.helper.inspections.TestFederationRedundantContractInspection"
+                         key="inspection.test.federation.redundant.contract.display.name"/>
+
+        <localInspection language="kotlin"
+                         groupName="Kotlin"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         shortName="TestFederationNightlyConflict"
+                         implementationClass="org.jetbrains.kotlin.test.helper.inspections.TestFederationNightlyConflictInspection"
+                         key="inspection.test.federation.nightly.conflict.display.name"/>
+
         <findUsagesHandlerFactory
                 implementation="org.jetbrains.kotlin.test.helper.findusages.FirElementFindUsagesHandlerFactory"
                 order="first"/>

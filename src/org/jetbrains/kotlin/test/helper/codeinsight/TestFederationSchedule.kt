@@ -41,6 +41,19 @@ internal operator fun TestFederationSchedule.plus(other: TestFederationSchedule)
         nightly = nightly || other.nightly,
     )
 
+internal val TestFederationSchedule.tags: List<String>
+    get() = buildList {
+        if (nightly) add(NIGHTLY_TAG)
+        if (smoke) add(SMOKE_TAG)
+        contractDomains.sorted().mapTo(this) { CONTRACT_TAG_PREFIX + it }
+    }
+
+// Smoke tests already run regardless of what changed.
+internal fun TestFederationSchedule.hasRedundantContracts(): Boolean = smoke && contractDomains.isNotEmpty()
+
+// Nightly tests are skipped before merging, so smoke and contract schedules never apply there.
+internal fun TestFederationSchedule.hasNightlyConflict(): Boolean = nightly && (smoke || contractDomains.isNotEmpty())
+
 internal fun PsiModifierListOwner.directTestFederationSchedule(): TestFederationSchedule =
     declaredFederationTags(hashSetOf()).toSchedule()
 
@@ -60,11 +73,16 @@ private fun PsiAnnotation.isRuntimeAnnotation(names: Array<out String>, visited:
         .any { it.isRuntimeAnnotation(names, visited) }
 }
 
-internal fun PsiClass.testFederationSchedule(): TestFederationSchedule {
-    val schedule = hierarchyFederationTags(hashSetOf(), hashSetOf()).toSchedule()
-    val parentSchedule = if (isJupiterNestedClass()) containingClass?.testFederationSchedule() else null
-    return schedule + (parentSchedule ?: TestFederationSchedule())
-}
+internal fun PsiClass.testFederationSchedule(): TestFederationSchedule =
+    ownTestFederationSchedule() + enclosingTestFederationSchedule()
+
+/** The schedule declared on this class and its supertypes, without `@Nested` parents. */
+internal fun PsiClass.ownTestFederationSchedule(): TestFederationSchedule =
+    hierarchyFederationTags(hashSetOf(), hashSetOf()).toSchedule()
+
+/** The schedule a `@Nested` class receives from its enclosing classes. */
+internal fun PsiClass.enclosingTestFederationSchedule(): TestFederationSchedule =
+    (if (isJupiterNestedClass()) containingClass?.testFederationSchedule() else null) ?: TestFederationSchedule()
 
 private fun PsiClass.hierarchyFederationTags(
     classes: MutableSet<PsiClass>,
