@@ -337,6 +337,7 @@ class TestFederationScheduleTest : BasePlatformTestCase() {
             import org.junit.jupiter.api.Tag
             class Sample {
                 @Tag(" smoke ")
+                @Tag(" nightly ")
                 @Tag(" contract:Jvm ")
                 @Tag("contract:Js,Native")
                 @Tag("contract:has space")
@@ -350,8 +351,120 @@ class TestFederationScheduleTest : BasePlatformTestCase() {
             """.trimIndent(),
         )
         assertEquals(
-            TestFederationSchedule(smoke = true, contractDomains = setOf("Jvm")),
+            TestFederationSchedule(smoke = true, contractDomains = setOf("Jvm"), nightly = true),
             getTestFederationSchedule(file.function("tagged")),
+        )
+    }
+
+    fun testNightlyTestAnnotationProvidesNightlySchedule() {
+        val file = parse(
+            """
+            package sample
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Tag
+            class Sample {
+                @NightlyTest fun annotated() {}
+                @Tag("nightly") fun direct() {}
+                @Tag("nightly:Jvm") fun notNightly() {}
+            }
+            """.trimIndent(),
+        )
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationSchedule(file.function("annotated")))
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationSchedule(file.function("direct")))
+        assertEquals(TestFederationSchedule(), getTestFederationSchedule(file.function("notNightly")))
+    }
+
+    fun testNightlyThroughComposedAnnotationAndInheritedBaseClass() {
+        val file = parse(
+            """
+            package sample
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Tag
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            @Tag("Slow") @NightlyTest
+            annotation class SlowNightly
+            @SlowNightly abstract class NightlyBaseTest
+            class InheritsNightlyTest : NightlyBaseTest()
+            class Sample {
+                @SlowNightly fun composed() {}
+            }
+            """.trimIndent(),
+        )
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationSchedule(file.function("composed")))
+        assertEquals(
+            TestFederationSchedule(nightly = true),
+            getTestFederationSchedule(file.ktClass("InheritsNightlyTest")),
+        )
+    }
+
+    fun testNightlyCombinesWithSmokeAndContractsIncludingContainerTags() {
+        val file = parse(
+            """
+            package sample
+            import org.jetbrains.kotlin.testFederation.MustRunAlways
+            import org.jetbrains.kotlin.testFederation.MustRunOnChangesInJs
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Tag
+            import org.junit.jupiter.api.Tags
+            @NightlyTest
+            class NightlyClassTest {
+                @MustRunAlways @MustRunOnChangesInJs fun combined() {}
+            }
+            class Sample {
+                @Tags(value = [Tag("nightly"), Tag("contract:Native")]) fun container() {}
+                @Tag("nightly") @Tag("smoke") fun repeated() {}
+            }
+            """.trimIndent(),
+        )
+        assertEquals(
+            TestFederationSchedule(smoke = true, contractDomains = setOf("Js"), nightly = true),
+            getTestFederationSchedule(file.function("combined")),
+        )
+        assertEquals(
+            TestFederationSchedule(contractDomains = setOf("Native"), nightly = true),
+            getTestFederationSchedule(file.function("container")),
+        )
+        assertEquals(
+            TestFederationSchedule(smoke = true, nightly = true),
+            getTestFederationSchedule(file.function("repeated")),
+        )
+    }
+
+    fun testNestedClassInheritsNightlyFromOuterClass() {
+        myFixture.addFileToProject(
+            "org/junit/jupiter/api/Nested.java",
+            """
+            package org.junit.jupiter.api;
+            import java.lang.annotation.*;
+            @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.TYPE)
+            public @interface Nested {}
+            """.trimIndent(),
+        )
+        val file = parse(
+            """
+            package sample
+            import org.jetbrains.kotlin.testFederation.NightlyTest
+            import org.junit.jupiter.api.Nested
+            import org.junit.jupiter.api.Tag
+            @NightlyTest
+            class Outer {
+                @Nested inner class Inner {
+                    @Tag("contract:Jvm") fun nested() {}
+                }
+                class Independent {
+                    @Tag("contract:Js") fun independent() {}
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationSchedule(file.ktClass("Inner")))
+        assertEquals(
+            TestFederationSchedule(contractDomains = setOf("Jvm"), nightly = true),
+            getTestFederationSchedule(file.function("nested")),
+        )
+        assertEquals(
+            TestFederationSchedule(contractDomains = setOf("Js")),
+            getTestFederationSchedule(file.function("independent")),
         )
     }
 
@@ -371,6 +484,10 @@ class TestFederationScheduleTest : BasePlatformTestCase() {
             @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
             @Tag("contract:Js")
             annotation class MustRunOnChangesInJs
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            @Tag("nightly")
+            annotation class NightlyTest
             """.trimIndent(),
         )
         return myFixture.addFileToProject("sample/SchedulingTest.kt", text) as KtFile

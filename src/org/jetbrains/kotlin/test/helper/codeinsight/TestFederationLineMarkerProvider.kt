@@ -39,6 +39,10 @@ import java.awt.event.MouseEvent
 private const val JUNIT5_FRAMEWORK_NAME = "JUnit5"
 private const val JUNIT_TEST_TEMPLATE = "org.junit.jupiter.api.TestTemplate"
 
+private val nightlyIcon = IconLoader.getIcon(
+    "/icons/test_federation_nightly.svg",
+    TestFederationLineMarkerProvider::class.java,
+)
 private val smokeIcon = IconLoader.getIcon(
     "/icons/test_federation_smoke.svg",
     TestFederationLineMarkerProvider::class.java,
@@ -55,7 +59,12 @@ internal class TestFederationLineMarkerProvider : LineMarkerProvider {
         if (declaration.nameIdentifier !== element) return null
         if (!TestDataPathsConfiguration.getInstance(element.project).testFederationGutterMarkersEnabled) return null
         val schedule = getTestFederationMarkerSchedule(declaration) ?: return null
-        val icon = if (schedule.smoke) smokeIcon else contractIcon
+        // Nightly tests are skipped before merging, even when they are also smoke or contract tests.
+        val icon = when {
+            schedule.nightly -> nightlyIcon
+            schedule.smoke -> smokeIcon
+            else -> contractIcon
+        }
         val tooltip = MyBundle.message("test.federation.marker.tooltip")
         return object : LineMarkerInfo<PsiElement>(
             element,
@@ -85,6 +94,9 @@ internal class TestFederationLineMarkerProvider : LineMarkerProvider {
 }
 
 internal fun formatTestFederationSchedule(schedule: TestFederationSchedule): List<String> = buildList {
+    if (schedule.nightly) {
+        add(MyBundle.message("test.federation.schedule.nightly"))
+    }
     if (schedule.smoke) {
         add(MyBundle.message("test.federation.schedule.smoke"))
     }
