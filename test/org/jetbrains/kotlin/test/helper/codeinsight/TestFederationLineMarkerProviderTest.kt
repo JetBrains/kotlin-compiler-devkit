@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.PsiDocumentManager
@@ -172,16 +173,17 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         val federationGutters = myFixture.findAllGutters()
             .filter { it.tooltipText == "Test Federation: when this test runs" }
 
-        assertEquals(2, federationGutters.size)
+        // The test without its own tags is still scheduled by its smoke class.
+        assertEquals(3, federationGutters.size)
         assertTrue(federationGutters.all { it.icon == icon("/icons/test_federation_smoke.svg") })
 
         val lineMarkers = DaemonCodeAnalyzerImpl.getLineMarkers(myFixture.editor.document, project)
             .filter { it.lineMarkerTooltip == "Test Federation: when this test runs" }
             .sortedBy { it.startOffset }
-        assertEquals(2, lineMarkers.size)
-        assertEquals(listOf(6, 9), lineMarkers.map { myFixture.editor.document.getLineNumber(it.startOffset) })
+        assertEquals(3, lineMarkers.size)
+        assertEquals(listOf(6, 9, 12), lineMarkers.map { myFixture.editor.document.getLineNumber(it.startOffset) })
         assertEquals(
-            listOf(icon("/icons/test_federation_smoke.svg"), icon("/icons/test_federation_smoke.svg")),
+            List(3) { icon("/icons/test_federation_smoke.svg") },
             lineMarkers.map { it.createGutterRenderer()!!.icon },
         )
     }
@@ -405,7 +407,7 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         assertEquals(schedule, getTestFederationMarkerSchedule(function))
     }
 
-    fun testNestedContainersReceiveEffectiveSchedulesWithoutDuplicatingMethodMarkers() {
+    fun testNestedContainersAndTheirTestsReceiveEffectiveSchedules() {
         myFixture.addFileToProject(
             "org/junit/jupiter/api/Nested.java",
             """
@@ -438,7 +440,9 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
             TestFederationSchedule(smoke = true, contractDomains = setOf("Js")),
             getTestFederationMarkerSchedule(file.function("scheduled")),
         )
-        assertNull(marker(file.function("classScheduleOnly")))
+        val classScheduleOnly = file.function("classScheduleOnly")
+        assertMarkerIcon(marker(classScheduleOnly), "/icons/test_federation_smoke.svg")
+        assertEquals(TestFederationSchedule(smoke = true), getTestFederationMarkerSchedule(classScheduleOnly))
         assertNull(marker(file.ktClass("NotNested")))
         assertNull(marker(file.function("invalidInnerTest")))
     }
@@ -448,6 +452,7 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
             """
             package sample
 
+            import org.jetbrains.kotlin.testFederation.MustRunAlways
             import org.jetbrains.kotlin.testFederation.NightlyTest
             import org.junit.jupiter.api.Tag
             import org.junit.jupiter.api.Test
@@ -473,6 +478,14 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
             class ClassLevelTest {
                 @Test
                 fun classScheduleOnly() {}
+
+                fun helper() {}
+            }
+
+            @MustRunAlways
+            class SmokeClassLevelTest {
+                @Test
+                fun smokeClassScheduleOnly() {}
             }
 
             @SlowNightly
@@ -500,7 +513,15 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         assertNull(marker(file.ktClass("FunctionLevelTest")))
 
         assertMarkerIcon(marker(file.ktClass("ClassLevelTest")), "/icons/test_federation_nightly.svg")
-        assertNull(marker(file.function("classScheduleOnly")))
+        // Tests in a scheduled class get the class icon too.
+        val classScheduleOnly = file.function("classScheduleOnly")
+        assertMarkerIcon(marker(classScheduleOnly), "/icons/test_federation_nightly.svg")
+        assertEquals(TestFederationSchedule(nightly = true), getTestFederationMarkerSchedule(classScheduleOnly))
+        assertNull(marker(file.function("helper")))
+        assertMarkerIcon(marker(file.ktClass("SmokeClassLevelTest")), "/icons/test_federation_smoke.svg")
+        val smokeClassScheduleOnly = file.function("smokeClassScheduleOnly")
+        assertMarkerIcon(marker(smokeClassScheduleOnly), "/icons/test_federation_smoke.svg")
+        assertEquals(TestFederationSchedule(smoke = true), getTestFederationMarkerSchedule(smokeClassScheduleOnly))
 
         assertNull(marker(file.ktClass("AbstractNightlyBase")))
         val concreteClass = file.ktClass("ConcreteNightlyTest")
@@ -611,9 +632,9 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
 
         myFixture.doHighlighting()
         val lineMarkers = federationLineMarkers().sortedBy { it.startOffset }
-        assertEquals(listOf(7, 10), lineMarkers.map { myFixture.editor.document.getLineNumber(it.startOffset) })
+        assertEquals(listOf(7, 10, 13), lineMarkers.map { myFixture.editor.document.getLineNumber(it.startOffset) })
         assertEquals(
-            listOf(icon("/icons/test_federation_nightly.svg"), icon("/icons/test_federation_nightly.svg")),
+            List(3) { icon("/icons/test_federation_nightly.svg") },
             lineMarkers.map { it.createGutterRenderer()!!.icon },
         )
 
@@ -635,7 +656,7 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         configurable.apply()
         assertTrue(configuration.testFederationGutterMarkersEnabled)
         myFixture.doHighlighting()
-        assertEquals(2, federationLineMarkers().size)
+        assertEquals(3, federationLineMarkers().size)
         configurable.disposeUIResources()
     }
 
@@ -644,29 +665,7 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         return myFixture.addFileToProject("sample/ScheduledTest.kt", text) as KtFile
     }
 
-    private fun addTestAnnotations() {
-        myFixture.addFileToProject(
-            "org/jetbrains/kotlin/testFederation/annotations.kt",
-            """
-            package org.jetbrains.kotlin.testFederation
-
-            import org.junit.jupiter.api.Tag
-
-            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
-            @Tag("smoke")
-            annotation class MustRunAlways
-
-            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
-            @Tag("contract:Js")
-            annotation class MustRunOnChangesInJs
-
-            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
-            @Tag("nightly")
-            annotation class NightlyTest
-            """.trimIndent(),
-        )
-        addJUnitAnnotations()
-    }
+    private fun addTestAnnotations() = myFixture.addTestFederationAnnotations()
 
     private fun marker(function: KtNamedFunction) = provider.getLineMarkerInfo(function.nameIdentifier!!)
 
@@ -693,20 +692,51 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
             .firstNotNullOfOrNull { it.findCheckBox(text) }
     }
 
-    private fun addJUnitAnnotations() {
-        myFixture.addFileToProject(
-            "org/junit/platform/commons/annotation/Testable.java",
-            """
+    private fun KtFile.function(name: String): KtNamedFunction =
+        PsiTreeUtil.findChildrenOfType(this, KtNamedFunction::class.java).single { it.name == name }
+
+    private fun KtFile.ktClass(name: String): KtClass =
+        PsiTreeUtil.findChildrenOfType(this, KtClass::class.java).single { it.name == name }
+}
+
+internal fun CodeInsightTestFixture.addTestFederationAnnotations() {
+    addFileToProject(
+        "org/jetbrains/kotlin/testFederation/annotations.kt",
+        """
+            package org.jetbrains.kotlin.testFederation
+
+            import org.junit.jupiter.api.Tag
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            @Tag("smoke")
+            annotation class MustRunAlways
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            @Tag("contract:Js")
+            annotation class MustRunOnChangesInJs
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+            @Tag("nightly")
+            annotation class NightlyTest
+            """.trimIndent(),
+    )
+    addJUnitAnnotations()
+}
+
+private fun CodeInsightTestFixture.addJUnitAnnotations() {
+    addFileToProject(
+        "org/junit/platform/commons/annotation/Testable.java",
+        """
             package org.junit.platform.commons.annotation;
             import java.lang.annotation.*;
             @Target({ElementType.ANNOTATION_TYPE, ElementType.METHOD, ElementType.TYPE})
             @Retention(RetentionPolicy.RUNTIME)
             public @interface Testable {}
             """.trimIndent(),
-        )
-        myFixture.addFileToProject(
-            "org/junit/jupiter/api/Tag.java",
-            """
+    )
+    addFileToProject(
+        "org/junit/jupiter/api/Tag.java",
+        """
             package org.junit.jupiter.api;
 
             import java.lang.annotation.ElementType;
@@ -722,10 +752,10 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
                 String value();
             }
             """.trimIndent(),
-        )
-        myFixture.addFileToProject(
-            "org/junit/jupiter/api/Tags.java",
-            """
+    )
+    addFileToProject(
+        "org/junit/jupiter/api/Tags.java",
+        """
             package org.junit.jupiter.api;
 
             import java.lang.annotation.ElementType;
@@ -739,10 +769,10 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
                 Tag[] value();
             }
             """.trimIndent(),
-        )
-        myFixture.addFileToProject(
-            "org/junit/jupiter/api/Test.java",
-            """
+    )
+    addFileToProject(
+        "org/junit/jupiter/api/Test.java",
+        """
             package org.junit.jupiter.api;
 
             import java.lang.annotation.ElementType;
@@ -755,12 +785,5 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
             @org.junit.platform.commons.annotation.Testable
             public @interface Test {}
             """.trimIndent(),
-        )
-    }
-
-    private fun KtFile.function(name: String): KtNamedFunction =
-        PsiTreeUtil.findChildrenOfType(this, KtNamedFunction::class.java).single { it.name == name }
-
-    private fun KtFile.ktClass(name: String): KtClass =
-        PsiTreeUtil.findChildrenOfType(this, KtClass::class.java).single { it.name == name }
+    )
 }

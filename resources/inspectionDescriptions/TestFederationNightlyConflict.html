@@ -1,0 +1,3 @@
+<p>Reports JUnit Jupiter test classes and functions that are nightly tests (<code>@Tag("nightly")</code>, e.g. <code>@NightlyTest</code>) and also smoke (<code>@Tag("smoke")</code>) or contract (<code>@Tag("contract:&lt;Domain&gt;")</code>) tests.</p>
+<p>Nightly tests are skipped in remote and safe-merge runs, so the smoke or contract schedule never applies before merging.</p>
+<p>Suppress with <code>@Suppress("TestFederationNightlyConflict")</code> on the function, class or file.</p>
