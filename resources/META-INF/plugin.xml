@@ -15,6 +15,8 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <fileEditorProvider implementation="org.jetbrains.kotlin.test.helper.KotlinTestDataFileEditorProvider"/>
+        <projectViewPane implementation="org.jetbrains.kotlin.test.helper.domain.DomainProjectViewPane"/>
+        <projectViewNodeDecorator implementation="org.jetbrains.kotlin.test.helper.domain.TestFederationIgnoreProjectViewNodeDecorator"/>
         <projectConfigurable bundle="messages.MyBundle" instance="org.jetbrains.kotlin.test.helper.TestDataPathsConfigurable"
                              key="pluginSettingsDisplayName"/>
 
@@ -31,6 +33,7 @@
                          key="inspection.parameter.should.be.context.parameter.display.name"/>
 
         <postStartupActivity implementation="org.jetbrains.kotlin.test.helper.inspections.OldPluginInstalledWarner"/>
+        <postStartupActivity implementation="org.jetbrains.kotlin.test.helper.domain.DomainProjectViewPaneStartupActivity"/>
         <notificationGroup id="Kotlin Compiler DevKit Notifications"
           displayType="BALLOON"
           key="compiler.devkit.notifications"/>
