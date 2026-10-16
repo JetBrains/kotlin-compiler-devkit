@@ -1,0 +1,13 @@
+<!-- Vector geometry from test-federation-logo-render.swift. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none">
+    <g stroke="#168653" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4.5L4.5 17.5"/>
+        <path d="M11 4.5L17.5 16.5L4.5 17.5"/>
+    </g>
+    <g fill="#168653">
+        <rect x="7.5" y="1" width="7" height="7" rx="2.2"/>
+        <rect x="1" y="14" width="7" height="7" rx="2.2"/>
+        <rect x="12" y="11" width="11" height="11" rx="3"/>
+    </g>
+    <path d="M14.5 16.5L16.6 18.6L20.5 14.4" stroke="#FFFFFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
