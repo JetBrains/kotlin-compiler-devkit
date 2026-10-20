@@ -78,6 +78,14 @@ tasks {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
         compilerOptions.freeCompilerArgs.add("-Xcontext-parameters")
     }
+
+    /*
+     * The bundled Vue.js plugin fails to initialize in the test runtime (its jar lives in `lib/modules`),
+     * which breaks tests whenever a VFS event wakes up the TypeScript compiler listener.
+     */
+    prepareTestSandbox {
+        disabledPlugins.add("org.jetbrains.plugins.vue")
+    }
 }
 
 sourceSets {
