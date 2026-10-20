@@ -7,23 +7,33 @@ import com.intellij.ide.projectView.ProjectViewNode
 import com.intellij.ide.projectView.ProjectViewSettings
 import com.intellij.ide.projectView.ViewSettings
 import com.intellij.ide.projectView.impl.GroupByTypeComparator
+import com.intellij.ide.projectView.impl.ProjectViewListener
 import com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode
 import com.intellij.ide.projectView.impl.nodes.PsiFileNode
 import com.intellij.ide.util.treeView.NodeRenderer
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.PlatformCoreDataKeys
+import com.intellij.openapi.actionSystem.Presentation
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.psi.JavaDirectoryService
 import com.intellij.psi.PsiManager
 import com.intellij.testFramework.LightProjectDescriptor
+import com.intellij.testFramework.TestActionEvent
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.ui.UIUtil
 import com.intellij.ui.LayeredIcon
@@ -32,9 +42,11 @@ import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import javax.swing.JTree
+import kotlinx.coroutines.awaitCancellation
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DomainTreeStructureTest : BasePlatformTestCase() {
@@ -135,22 +147,132 @@ class DomainTreeStructureTest : BasePlatformTestCase() {
         assertDeclarationOrderUnderAllSortSettings(groups, listOf("Gamma", "Delta", "Alpha", "Beta"))
     }
 
-    fun testCompactDirectoriesSettingIsAvailableToDomainTreeStructure() {
-        val projectView = ProjectView.getInstance(project)
-        val pane = DomainProjectViewPane(project)
-        val previousSetting = projectView.isCompactDirectories(DomainProjectViewPane.VIEW_ID)
-        try {
-            assertTrue(pane.supportsCompactDirectories())
+    fun testDomainGroupsWithoutBuildStatusesUseDefaultIconAndDoNotCreateTheService() {
+        val groups = loadDomainGroups("Alpha:\n- compiler-domain-group-test/Assigned.txt")
 
-            projectView.setCompactDirectories(DomainProjectViewPane.VIEW_ID, false)
-            assertFalse(DomainTreeStructure(project, DomainProjectViewPane.VIEW_ID).isCompactDirectories)
+        val alpha = groups.single()
+        alpha.update()
 
-            projectView.setCompactDirectories(DomainProjectViewPane.VIEW_ID, true)
-            assertTrue(DomainTreeStructure(project, DomainProjectViewPane.VIEW_ID).isCompactDirectories)
-        } finally {
-            projectView.setCompactDirectories(DomainProjectViewPane.VIEW_ID, previousSetting)
-            pane.dispose()
+        assertSame(domainIcon, alpha.presentation.getIcon(false))
+        assertNull(alpha.presentation.tooltip)
+        assertNull(
+            project.getServiceIfCreated(DomainBuildStatusService::class.java),
+            "Rendering domain nodes must not create the build status service",
+        )
+    }
+
+    fun testDomainGroupsRenderBuildStatusIconsAndTooltips() {
+        val groups = loadDomainGroups(
+            """
+                Alpha:
+                - compiler-domain-group-test/Assigned.txt
+                Beta:
+                - compiler-domain-group-test/Assigned.txt
+                Gamma:
+                - compiler-domain-group-test/Assigned.txt
+            """.trimIndent(),
+        )
+        val alphaStatus = DomainBuildStatus(isSuccess = true, statusText = "Tests passed: 94190", webUrl = "https://alpha")
+        val betaStatus = DomainBuildStatus(isSuccess = false, statusText = "Tests failed: 3", webUrl = "https://beta")
+        val statuses = mapOf(Domain.of("Alpha") to alphaStatus, Domain.of("Beta") to betaStatus)
+        DomainBuildStatusService.getInstance(project).updateStatuses(statuses)
+
+        val presentations = groups.associate { group ->
+            group.update()
+            group.value to group.presentation
         }
+
+        assertSame(domainBuildSuccessIcon, presentations.getValue("Alpha").getIcon(false))
+        assertEquals("Tests passed: 94190", presentations.getValue("Alpha").tooltip)
+
+        assertSame(domainBuildFailureIcon, presentations.getValue("Beta").getIcon(false))
+        assertEquals("Tests failed: 3", presentations.getValue("Beta").tooltip)
+
+        assertSame(domainIcon, presentations.getValue("Gamma").getIcon(false))
+        assertNull(presentations.getValue("Gamma").tooltip)
+
+        DomainBuildStatusService.getInstance(project).updateStatuses(emptyMap())
+        groups.forEach { group -> group.update() }
+        assertTrue(groups.all { group -> group.presentation.getIcon(false) === domainIcon })
+        assertTrue(groups.all { group -> group.presentation.tooltip == null })
+    }
+
+    fun testDomainPaneThatIsNotShownDoesNotPollBuildStatuses() {
+        loadDomainGroups("Alpha:\n- compiler-domain-group-test/Assigned.txt")
+        val pane = DomainProjectViewPane(project)
+        try {
+            /* Headless tests have no visible Project tool window and the Domain pane is not selected. */
+            project.messageBus.syncPublisher(ProjectViewListener.TOPIC).paneShown(pane, null)
+            project.messageBus.syncPublisher(ToolWindowManagerListener.TOPIC)
+                .stateChanged(ToolWindowManager.getInstance(project))
+            UIUtil.dispatchAllInvocationEvents()
+
+            assertNull(
+                project.getServiceIfCreated(DomainBuildStatusService::class.java),
+                "A Domain pane that is not shown must not create the build status service",
+            )
+
+            /* A pane that becomes hidden stops polling that is still running. */
+            val service = DomainBuildStatusService.getInstance(project)
+            service.fetchStatuses = { awaitCancellation() }
+            service.setPollingActive(true)
+
+            project.messageBus.syncPublisher(ToolWindowManagerListener.TOPIC)
+                .stateChanged(ToolWindowManager.getInstance(project))
+
+            assertFalse(service.isPolling)
+        } finally {
+            Disposer.dispose(pane)
+        }
+    }
+
+    fun testOpenBuildInTeamCityActionIsEnabledOnlyForDomainsWithKnownBuilds() {
+        val groups = loadDomainGroups(
+            """
+                Alpha:
+                - compiler-domain-group-test/Assigned.txt
+                Beta:
+                - compiler-domain-group-test/Assigned.txt
+            """.trimIndent(),
+        )
+        val alpha = groups.single { group -> group.value == "Alpha" }
+        val beta = groups.single { group -> group.value == "Beta" }
+        val alphaChild = alpha.children.first()
+        val action = ActionManager.getInstance().getAction("OpenDomainBuildInTeamCity") as OpenDomainBuildInTeamCityAction
+
+        fun updatedPresentation(vararg selectedItems: Any): Presentation {
+            val dataContext = SimpleDataContext.builder()
+                .add(CommonDataKeys.PROJECT, project)
+                .add(PlatformCoreDataKeys.SELECTED_ITEMS, arrayOf(*selectedItems))
+                .build()
+            val event = TestActionEvent.createTestEvent(action, dataContext)
+            action.update(event)
+            return event.presentation
+        }
+
+        val alphaWithoutService = updatedPresentation(alpha)
+        assertTrue(alphaWithoutService.isVisible)
+        assertFalse(alphaWithoutService.isEnabled)
+        assertNull(
+            project.getServiceIfCreated(DomainBuildStatusService::class.java),
+            "Updating the action must not create the build status service",
+        )
+
+        DomainBuildStatusService.getInstance(project).updateStatuses(
+            mapOf(Domain.of("Alpha") to DomainBuildStatus(isSuccess = false, statusText = "Tests failed: 3", webUrl = "https://alpha")),
+        )
+
+        val alphaWithStatus = updatedPresentation(alpha)
+        assertTrue(alphaWithStatus.isVisible)
+        assertTrue(alphaWithStatus.isEnabled)
+
+        val betaWithoutStatus = updatedPresentation(beta)
+        assertTrue(betaWithoutStatus.isVisible)
+        assertFalse(betaWithoutStatus.isEnabled)
+
+        assertFalse(updatedPresentation(alphaChild).isVisible, "Nested domain files are not domain nodes")
+        assertFalse(updatedPresentation(alpha, beta).isVisible, "Multiple selected domains have no single build")
+        assertFalse(updatedPresentation().isVisible)
     }
 
     fun testRepositoryStructureChangesAdvanceTheRevision() {
@@ -979,6 +1101,11 @@ class DomainTreeStructureTest : BasePlatformTestCase() {
         )
             .mapNotNull { name -> project.basePath?.let { File(it, name) } }
         try {
+            project.getServiceIfCreated(DomainBuildStatusService::class.java)?.let { service ->
+                service.setPollingActive(false)
+                service.fetchStatuses = service::fetchStatusesOrEmpty
+                service.updateStatuses(emptyMap())
+            }
             super.tearDown()
         } finally {
             // Disk-only cleanup: a VFS delete event would trigger the bundled Vue plugin's LSP initialization.

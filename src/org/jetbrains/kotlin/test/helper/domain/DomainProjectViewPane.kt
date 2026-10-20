@@ -6,11 +6,14 @@ import com.intellij.ide.impl.ProjectViewSelectInTarget
 import com.intellij.ide.projectView.NodeSortOrder
 import com.intellij.ide.projectView.NodeSortSettings
 import com.intellij.ide.projectView.PresentationData
+import com.intellij.ide.projectView.ProjectView
 import com.intellij.ide.projectView.ProjectViewNode
 import com.intellij.ide.projectView.ViewSettings
+import com.intellij.ide.projectView.impl.AbstractProjectViewPane
 import com.intellij.ide.projectView.impl.AbstractProjectViewPaneWithAsyncSupport
 import com.intellij.ide.projectView.impl.ProjectAbstractTreeStructureBase
 import com.intellij.ide.projectView.impl.ProjectTreeStructure
+import com.intellij.ide.projectView.impl.ProjectViewListener
 import com.intellij.ide.projectView.impl.ProjectViewTree
 import com.intellij.ide.projectView.impl.nodes.ProjectViewDirectoryHelper
 import com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode
@@ -30,6 +33,9 @@ import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.wm.ToolWindowId
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.JavaDirectoryService
 import com.intellij.psi.PsiManager
@@ -37,7 +43,7 @@ import java.awt.Color
 import javax.swing.Icon
 import javax.swing.tree.DefaultTreeModel
 
-private val domainIcon: Icon = IconLoader.getIcon("/icons/test_federation.svg", DomainProjectViewPane::class.java)
+internal val domainIcon: Icon = IconLoader.getIcon("/icons/test_federation.svg", DomainProjectViewPane::class.java)
 
 
 class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsyncSupport(project) {
@@ -53,6 +59,10 @@ class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsync
             DomainProjectService.MODEL_CHANGED_TOPIC,
             DomainModelListener { scheduleTreeRefresh(project) },
         )
+
+        if (DomainProjectService.hasDumpMarker(project)) {
+            followBuildStatusPollingActivity(project)
+        }
     }
 
     override fun getTitle(): String = "Domain"
@@ -62,9 +72,6 @@ class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsync
     override fun getIcon(): Icon = domainIcon
 
     override fun getWeight(): Int = 2
-
-    @Suppress("UnstableApiUsage")
-    override fun supportsCompactDirectories(): Boolean = true
 
     override fun createSelectInTarget(): SelectInTarget = DomainProjectViewSelectInTarget(myProject)
 
@@ -77,7 +84,38 @@ class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsync
 
     override fun dispose() {
         paneDisposed = true
+        myProject.getServiceIfCreated(DomainBuildStatusService::class.java)?.setPollingActive(false)
         super.dispose()
+    }
+
+    /* Build statuses are polled only while a Domain pane is selected in a visible Project tool window. */
+    private fun followBuildStatusPollingActivity(project: Project) {
+        val connection = project.messageBus.connect(this)
+
+        connection.subscribe(ProjectViewListener.TOPIC, object : ProjectViewListener {
+            override fun paneShown(current: AbstractProjectViewPane, previous: AbstractProjectViewPane?) {
+                updateBuildStatusPolling(project)
+            }
+        })
+
+        connection.subscribe(ToolWindowManagerListener.TOPIC, object : ToolWindowManagerListener {
+            override fun stateChanged(toolWindowManager: ToolWindowManager) {
+                updateBuildStatusPolling(project)
+            }
+        })
+
+        /* The pane may already be shown before any of the events above fire. */
+        ApplicationManager.getApplication().invokeLater({ updateBuildStatusPolling(project) }, project.disposed)
+    }
+
+    private fun updateBuildStatusPolling(project: Project) {
+        if (project.isDisposed || paneDisposed) return
+
+        if (isDomainPaneShown(project)) {
+            DomainBuildStatusService.getInstance(project).setPollingActive(true)
+        } else {
+            project.getServiceIfCreated(DomainBuildStatusService::class.java)?.setPollingActive(false)
+        }
     }
 
     private fun scheduleTreeRefresh(project: Project) {
@@ -90,6 +128,14 @@ class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsync
 
     override fun createStructure(): ProjectAbstractTreeStructureBase =
         DomainTreeStructure(myProject, getId())
+}
+
+/* Checks for any Domain pane instance, so that several instances never disagree about polling. */
+private fun isDomainPaneShown(project: Project): Boolean {
+    if (ProjectView.getInstance(project).currentProjectViewPane !is DomainProjectViewPane) return false
+
+    val projectToolWindow = ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.PROJECT_VIEW)
+    return projectToolWindow?.isVisible == true
 }
 
 private class DomainProjectViewSelectInTarget(project: Project) : ProjectViewSelectInTarget(project), DumbAware {
@@ -196,7 +242,7 @@ private data class DomainTreeSnapshot(
 internal class DomainGroupNode(
     project: Project,
     private val settings: ViewSettings,
-    domain: Domain,
+    internal val domain: Domain,
     internal val domainIndex: Int,
     private val repositoryRoot: RepositoryRoot,
     private val domainPathTree: DomainPathNode,
@@ -209,8 +255,11 @@ internal class DomainGroupNode(
         }
 
     override fun update(presentation: PresentationData) {
+        val buildStatus = project.getServiceIfCreated(DomainBuildStatusService::class.java)?.status(domain)
+
         presentation.setPresentableText(getValue())
-        presentation.setIcon(domainIcon)
+        presentation.setIcon(domainBuildStatusIcon(buildStatus))
+        presentation.tooltip = buildStatus?.statusText
     }
 
     override fun contains(file: VirtualFile): Boolean {
