@@ -261,6 +261,14 @@
             <add-to-group group-id="EditorTabPopupMenuEx" anchor="last"/>
         </action>
 
+        <action id="OpenDomainBuildInTeamCity"
+                class="org.jetbrains.kotlin.test.helper.domain.OpenDomainBuildInTeamCityAction"
+                text="Open Build in TeamCity"
+                description="Opens the latest finished master build of the selected domain in the browser"
+                icon="AllIcons.General.Web">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
         <action id="RunAllChangesTests" class="org.jetbrains.kotlin.test.helper.actions.RunAllChangedTestsAction"
                 text="Run All Changed Tests"
                 description="Run all tests related to changed test data files"
