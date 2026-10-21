@@ -17,6 +17,8 @@ import com.intellij.openapi.ui.popup.Balloon
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiIdentifier
+import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiTypes
@@ -26,6 +28,7 @@ import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.ui.awt.RelativePoint
 import com.siyeh.ig.junit.JUnitCommonClassNames.ORG_JUNIT_JUPITER_API_TEST as JUNIT_TEST
 import com.siyeh.ig.junit.JUnitCommonClassNames.ORG_JUNIT_JUPITER_API_TEST_FACTORY as JUNIT_TEST_FACTORY
+import org.jetbrains.kotlin.asJava.elements.KtLightElement
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.psi.KtClass
@@ -54,11 +57,13 @@ private val contractIcon = IconLoader.getIcon(
 
 internal class TestFederationLineMarkerProvider : LineMarkerProvider {
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
-        val declaration = element.parent as? KtNamedDeclaration ?: return null
-        if (declaration !is KtClass && declaration !is KtNamedFunction) return null
-        if (declaration.nameIdentifier !== element) return null
+        if (!isDeclarationNameIdentifier(element)) return null
         if (!TestDataPathsConfiguration.getInstance(element.project).testFederationGutterMarkersEnabled) return null
-        val schedule = getTestFederationMarkerSchedule(declaration) ?: return null
+        val schedule = when (val declaration = element.parent) {
+            is KtNamedDeclaration -> getTestFederationMarkerSchedule(declaration)
+            is PsiMember -> getTestFederationMarkerSchedule(declaration)
+            else -> null
+        } ?: return null
         // Nightly tests are skipped before merging, even when they are also smoke or contract tests.
         val icon = when {
             schedule.nightly -> nightlyIcon
@@ -93,6 +98,16 @@ internal class TestFederationLineMarkerProvider : LineMarkerProvider {
     }
 }
 
+/* Markers are anchored on the name identifier of a Kotlin class/function or a Java class/method. */
+private fun isDeclarationNameIdentifier(element: PsiElement): Boolean = when (val declaration = element.parent) {
+    is KtClass -> declaration.nameIdentifier === element
+    is KtNamedFunction -> declaration.nameIdentifier === element
+    is KtLightElement<*, *> -> false
+    is PsiClass -> element is PsiIdentifier && declaration.nameIdentifier === element
+    is PsiMethod -> element is PsiIdentifier && declaration.nameIdentifier === element
+    else -> false
+}
+
 internal fun formatTestFederationSchedule(schedule: TestFederationSchedule): List<String> = buildList {
     if (schedule.nightly) {
         add(MyBundle.message("test.federation.schedule.nightly"))
@@ -119,6 +134,9 @@ private fun showSchedulePopup(event: MouseEvent, schedule: TestFederationSchedul
 internal fun getTestFederationMarkerSchedule(declaration: KtNamedDeclaration): TestFederationSchedule? =
     getTestFederationDeclarationSchedule(declaration)?.effective
 
+internal fun getTestFederationMarkerSchedule(member: PsiMember): TestFederationSchedule? =
+    getTestFederationDeclarationSchedule(member)?.effective
+
 /**
  * [own] is declared on the test function, or on the test class and its supertypes;
  * [inherited] comes from the containing test class, or from the enclosing classes of a `@Nested` class.
@@ -139,34 +157,62 @@ internal fun getTestFederationDeclarationSchedule(declaration: KtNamedDeclaratio
         )
     }
 
+/* Java [PsiClass] / [PsiMethod] counterpart of the Kotlin overload above. */
+internal fun getTestFederationDeclarationSchedule(member: PsiMember): TestFederationDeclarationSchedule? =
+    CachedValuesManager.getCachedValue(member) {
+        CachedValueProvider.Result.create(
+            computeJavaDeclarationSchedule(member),
+            PsiModificationTracker.MODIFICATION_COUNT,
+            ProjectRootModificationTracker.getInstance(member.project),
+        )
+    }
+
 private fun computeTestFederationDeclarationSchedule(
     declaration: KtNamedDeclaration,
-): TestFederationDeclarationSchedule? {
-    val schedule = when (declaration) {
-        is KtNamedFunction -> {
-            if (declaration.annotationEntries.isEmpty() || declaration.parent !is KtClassBody) return null
-            val method = declaration.toLightMethods().firstOrNull() ?: return null
-            val testClass = method.containingClass ?: return null
-            if (!testClass.isJupiterTestContainer() || !testClass.hasJupiterFramework()) return null
-            if (!method.isJupiterTestMethod()) return null
-            // Tests also get a marker when their schedule comes only from the class.
-            TestFederationDeclarationSchedule(
-                method.directTestFederationSchedule(),
-                testClass.cachedTestFederationSchedule(),
-            )
-        }
-
-        is KtClass -> {
-            val testClass = declaration.toLightClass() ?: return null
-            if (!testClass.isJupiterTestClass()) return null
-            TestFederationDeclarationSchedule(
-                testClass.ownTestFederationSchedule(),
-                testClass.enclosingTestFederationSchedule(),
-            )
-        }
-
-        else -> return null
+): TestFederationDeclarationSchedule? = when (declaration) {
+    is KtNamedFunction -> {
+        if (declaration.annotationEntries.isEmpty() || declaration.parent !is KtClassBody) return null
+        val method = declaration.toLightMethods().firstOrNull() ?: return null
+        computeMethodSchedule(method)
     }
+
+    is KtClass -> {
+        val testClass = declaration.toLightClass() ?: return null
+        computeClassSchedule(testClass)
+    }
+
+    else -> null
+}
+
+private fun computeJavaDeclarationSchedule(member: PsiMember): TestFederationDeclarationSchedule? = when (member) {
+    is PsiMethod -> {
+        if (member.modifierList.annotations.isEmpty()) return null
+        computeMethodSchedule(member)
+    }
+
+    is PsiClass -> computeClassSchedule(member)
+
+    else -> null
+}
+
+private fun computeMethodSchedule(method: PsiMethod): TestFederationDeclarationSchedule? {
+    val testClass = method.containingClass ?: return null
+    if (!testClass.isJupiterTestContainer() || !testClass.hasJupiterFramework()) return null
+    if (!method.isJupiterTestMethod()) return null
+    // Tests also get a marker when their schedule comes only from the class.
+    val schedule = TestFederationDeclarationSchedule(
+        method.directTestFederationSchedule(),
+        testClass.cachedTestFederationSchedule(),
+    )
+    return schedule.takeUnless { it.effective.isEmpty() }
+}
+
+private fun computeClassSchedule(testClass: PsiClass): TestFederationDeclarationSchedule? {
+    if (!testClass.isJupiterTestClass()) return null
+    val schedule = TestFederationDeclarationSchedule(
+        testClass.ownTestFederationSchedule(),
+        testClass.enclosingTestFederationSchedule(),
+    )
     return schedule.takeUnless { it.effective.isEmpty() }
 }
 

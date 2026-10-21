@@ -10,6 +10,10 @@ import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiMethod
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.ui.components.JBCheckBox
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtFile
@@ -660,6 +664,284 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
         configurable.disposeUIResources()
     }
 
+    fun testJavaSubclassOfKotlinContractBaseReceivesMarkers() {
+        addNestedAnnotation()
+        myFixture.addFileToProject(
+            "sample/AbstractAnalysisApiBasedTest.kt",
+            """
+            package sample
+            import org.junit.jupiter.api.Tag
+
+            @Target(AnnotationTarget.ANNOTATION_CLASS, AnnotationTarget.CLASS)
+            @Tag("contract:AnalysisApi")
+            annotation class MustRunOnChangesInAnalysisApi
+
+            @MustRunOnChangesInAnalysisApi
+            abstract class AbstractAnalysisApiBasedTest
+            """.trimIndent(),
+        )
+        val file = parseJava(
+            "SwiftExportInIdeTestGenerated",
+            """
+            package sample;
+
+            import org.junit.jupiter.api.Nested;
+            import org.junit.jupiter.api.Test;
+
+            public class SwiftExportInIdeTestGenerated extends AbstractAnalysisApiBasedTest {
+                @Test
+                public void testFirst() {}
+
+                @Test
+                public void testSecond() {}
+
+                public void helper() {}
+
+                @Nested
+                public class NestedGroup {
+                    @Test
+                    public void testNested() {}
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val contractSchedule = TestFederationSchedule(contractDomains = setOf("AnalysisApi"))
+        val testClass = file.psiClass("SwiftExportInIdeTestGenerated")
+        assertMarkerIcon(marker(testClass), "/icons/test_federation_contract.svg")
+        assertEquals(contractSchedule, getTestFederationMarkerSchedule(testClass))
+        for (name in listOf("testFirst", "testSecond", "testNested")) {
+            val method = file.psiMethod(name)
+            assertMarkerIcon(marker(method), "/icons/test_federation_contract.svg")
+            assertEquals(name, contractSchedule, getTestFederationMarkerSchedule(method))
+        }
+        assertEquals(
+            listOf(
+                "Contract test for AnalysisApi: required when AnalysisApi changes or when this test's own domain " +
+                    "needs testing.",
+            ),
+            formatTestFederationSchedule(getTestFederationMarkerSchedule(file.psiMethod("testFirst"))!!),
+        )
+
+        val nestedClass = file.psiClass("NestedGroup")
+        assertMarkerIcon(marker(nestedClass), "/icons/test_federation_contract.svg")
+        assertEquals(contractSchedule, getTestFederationMarkerSchedule(nestedClass))
+        assertNull(marker(file.psiMethod("helper")))
+    }
+
+    fun testJavaTestsWithOwnSchedulesAndInvalidJavaDeclarations() {
+        val file = parseJava(
+            "JavaScheduleTest",
+            """
+            package sample;
+
+            import org.jetbrains.kotlin.testFederation.MustRunAlways;
+            import org.junit.jupiter.api.Tag;
+            import org.junit.jupiter.api.Test;
+
+            public class JavaScheduleTest {
+                @Test
+                @Tag("smoke")
+                public void smokeTest() {}
+
+                @Test
+                @MustRunAlways
+                public void metaAnnotatedSmokeTest() {}
+
+                @Test
+                @Tag("contract:Js")
+                public void contractTest() {}
+
+                @Tag("smoke")
+                public void scheduledButNotATest() {}
+
+                @Test
+                public void testWithoutSchedule() {}
+
+                @Test
+                @Tag("smoke")
+                private void privateTest() {}
+
+                @Tag("smoke")
+                public static abstract class AbstractNested {
+                    @Test
+                    public void inAbstractClass() {}
+                }
+
+                @Tag("smoke")
+                private static class PrivateNested {
+                    @Test
+                    public void inPrivateClass() {}
+                }
+
+                @Tag("smoke")
+                public interface TaggedInterface {
+                    @Test
+                    default void inInterface() {}
+                }
+            }
+
+            class JavaTestWithoutSchedule {
+                @Test
+                public void test() {}
+            }
+            """.trimIndent(),
+        )
+
+        assertMarkerIcon(marker(file.psiMethod("smokeTest")), "/icons/test_federation_smoke.svg")
+        assertMarkerIcon(marker(file.psiMethod("metaAnnotatedSmokeTest")), "/icons/test_federation_smoke.svg")
+        assertEquals(
+            TestFederationSchedule(smoke = true),
+            getTestFederationMarkerSchedule(file.psiMethod("metaAnnotatedSmokeTest")),
+        )
+        assertMarkerIcon(marker(file.psiMethod("contractTest")), "/icons/test_federation_contract.svg")
+
+        // The class itself has no schedule; only its methods do.
+        assertNull(marker(file.psiClass("JavaScheduleTest")))
+        val unscheduledMethods = listOf(
+            "scheduledButNotATest", "testWithoutSchedule", "privateTest",
+            "inAbstractClass", "inPrivateClass", "inInterface", "test",
+        )
+        for (name in unscheduledMethods) {
+            assertNull(name, marker(file.psiMethod(name)))
+        }
+        for (name in listOf("AbstractNested", "PrivateNested", "TaggedInterface", "JavaTestWithoutSchedule")) {
+            assertNull(name, marker(file.psiClass(name)))
+        }
+    }
+
+    fun testJavaFactoryAndTemplateMethodsInheritSchedulesFromJavaSuperclass() {
+        myFixture.addFileToProject(
+            "org/junit/jupiter/api/TestFactory.java",
+            """
+            package org.junit.jupiter.api;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD) @Retention(RetentionPolicy.RUNTIME)
+            @org.junit.platform.commons.annotation.Testable
+            public @interface TestFactory {}
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "org/junit/jupiter/api/TestTemplate.java",
+            """
+            package org.junit.jupiter.api;
+            import java.lang.annotation.*;
+            @Target(ElementType.METHOD) @Retention(RetentionPolicy.RUNTIME)
+            @org.junit.platform.commons.annotation.Testable
+            public @interface TestTemplate {}
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "org/junit/jupiter/api/DynamicNode.java",
+            "package org.junit.jupiter.api; public abstract class DynamicNode {}",
+        )
+        val file = parseJava(
+            "JavaInheritedScheduleTest",
+            """
+            package sample;
+
+            import java.util.stream.Stream;
+            import org.junit.jupiter.api.DynamicNode;
+            import org.junit.jupiter.api.Tag;
+            import org.junit.jupiter.api.TestFactory;
+            import org.junit.jupiter.api.TestTemplate;
+
+            @Tag("contract:Native")
+            abstract class JavaContractBase {}
+
+            public class JavaInheritedScheduleTest extends JavaContractBase {
+                @TestFactory
+                @Tag("smoke")
+                public Stream<DynamicNode> factory() { return null; }
+
+                @TestTemplate
+                @Tag("contract:Js")
+                public void template() {}
+            }
+            """.trimIndent(),
+        )
+
+        val inheritedSchedule = TestFederationSchedule(contractDomains = setOf("Native"))
+        val testClass = file.psiClass("JavaInheritedScheduleTest")
+        assertMarkerIcon(marker(testClass), "/icons/test_federation_contract.svg")
+        assertEquals(inheritedSchedule, getTestFederationMarkerSchedule(testClass))
+
+        val factory = file.psiMethod("factory")
+        assertMarkerIcon(marker(factory), "/icons/test_federation_smoke.svg")
+        assertEquals(
+            TestFederationSchedule(smoke = true, contractDomains = setOf("Native")),
+            getTestFederationMarkerSchedule(factory),
+        )
+
+        val template = file.psiMethod("template")
+        assertMarkerIcon(marker(template), "/icons/test_federation_contract.svg")
+        assertEquals(
+            TestFederationSchedule(contractDomains = setOf("Js", "Native")),
+            getTestFederationMarkerSchedule(template),
+        )
+        assertNull(marker(file.psiClass("JavaContractBase")))
+    }
+
+    fun testJavaExtensionRegistrationRespectsSetting() {
+        addTestAnnotations()
+        myFixture.configureByText(
+            "RegisteredJavaScheduleTest.java",
+            """
+            package sample;
+
+            import org.junit.jupiter.api.Tag;
+            import org.junit.jupiter.api.Test;
+
+            @Tag("smoke")
+            public class RegisteredJavaScheduleTest {
+                @Test
+                @Tag("contract:Js")
+                public void scheduled() {}
+
+                @Test
+                public void classScheduleOnly() {}
+
+                public void helper() {}
+            }
+            """.trimIndent(),
+        )
+
+        myFixture.doHighlighting()
+        val lineMarkers = federationLineMarkers().sortedBy { it.startOffset }
+        assertEquals(listOf(6, 9, 12), lineMarkers.map { myFixture.editor.document.getLineNumber(it.startOffset) })
+        assertEquals(
+            List(3) { icon("/icons/test_federation_smoke.svg") },
+            lineMarkers.map { it.createGutterRenderer()!!.icon },
+        )
+
+        val configuration = TestDataPathsConfiguration.getInstance(project)
+        try {
+            configuration.testFederationGutterMarkersEnabled = false
+            DaemonCodeAnalyzer.getInstance(project).restart("test")
+            myFixture.doHighlighting()
+            assertTrue(federationLineMarkers().isEmpty())
+        } finally {
+            configuration.testFederationGutterMarkersEnabled = true
+        }
+    }
+
+    private fun parseJava(className: String, text: String): PsiJavaFile {
+        addTestAnnotations()
+        return myFixture.addFileToProject("sample/$className.java", text) as PsiJavaFile
+    }
+
+    private fun addNestedAnnotation() {
+        myFixture.addFileToProject(
+            "org/junit/jupiter/api/Nested.java",
+            """
+            package org.junit.jupiter.api;
+            import java.lang.annotation.*;
+            @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.TYPE)
+            public @interface Nested {}
+            """.trimIndent(),
+        )
+    }
+
     private fun parse(text: String): KtFile {
         addTestAnnotations()
         return myFixture.addFileToProject("sample/ScheduledTest.kt", text) as KtFile
@@ -670,6 +952,10 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
     private fun marker(function: KtNamedFunction) = provider.getLineMarkerInfo(function.nameIdentifier!!)
 
     private fun marker(ktClass: KtClass) = provider.getLineMarkerInfo(ktClass.nameIdentifier!!)
+
+    private fun marker(method: PsiMethod) = provider.getLineMarkerInfo(method.nameIdentifier!!)
+
+    private fun marker(psiClass: PsiClass) = provider.getLineMarkerInfo(psiClass.nameIdentifier!!)
 
     private fun assertMarkerIcon(
         marker: com.intellij.codeInsight.daemon.LineMarkerInfo<*>?,
@@ -697,6 +983,12 @@ class TestFederationLineMarkerProviderTest : BasePlatformTestCase() {
 
     private fun KtFile.ktClass(name: String): KtClass =
         PsiTreeUtil.findChildrenOfType(this, KtClass::class.java).single { it.name == name }
+
+    private fun PsiJavaFile.psiMethod(name: String): PsiMethod =
+        PsiTreeUtil.findChildrenOfType(this, PsiMethod::class.java).single { it.name == name }
+
+    private fun PsiJavaFile.psiClass(name: String): PsiClass =
+        PsiTreeUtil.findChildrenOfType(this, PsiClass::class.java).single { it.name == name }
 }
 
 internal fun CodeInsightTestFixture.addTestFederationAnnotations() {
