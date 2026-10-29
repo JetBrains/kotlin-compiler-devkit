@@ -8,7 +8,9 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/* Polling tests replace the fetcher, so no network access happens. */
+/**
+ * Polling tests replace the fetcher, so no network access happens.
+ */
 class DomainBuildStatusServiceTest : BasePlatformTestCase() {
     private val analysisApi = Domain.of("AnalysisApi")
     private val compiler = Domain.of("Compiler")
@@ -197,7 +199,9 @@ class DomainBuildStatusServiceTest : BasePlatformTestCase() {
         assertTrue("Unexpected fetch", fetches.tryReceive().isFailure)
     }
 
-    /* The light project is shared between tests, so cached statuses and polling must not leak. */
+    /**
+     * The light project is shared between tests, so cached statuses and polling must not leak.
+     */
     override fun tearDown() {
         try {
             project.getServiceIfCreated(DomainBuildStatusService::class.java)?.let { service ->

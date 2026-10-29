@@ -1,0 +1,10 @@
+<!-- Outlined Remote Run icon (Compact Mode, 16x16). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <g stroke="#6C707E" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5.5" y="1.5" width="4" height="4" rx="1"/>
+        <path d="M6.5 5.5L4 8.5"/>
+        <path d="M8.5 5.5L11.5 8.5"/>
+        <path d="M2 15V9.5H4C5 9.5 5.75 10.25 5.75 11.25C5.75 12.25 5 13 4 13H2M4 13L5.75 15"/>
+        <path d="M10.25 15V9.5H12.25C13.25 9.5 14 10.25 14 11.25C14 12.25 13.25 13 12.25 13H10.25M12.25 13L14 15"/>
+    </g>
+</svg>
