@@ -98,7 +98,9 @@ internal class TestFederationLineMarkerProvider : LineMarkerProvider {
     }
 }
 
-/* Markers are anchored on the name identifier of a Kotlin class/function or a Java class/method. */
+/**
+ * Markers are anchored on the name identifier of a Kotlin class/function or a Java class/method.
+ */
 private fun isDeclarationNameIdentifier(element: PsiElement): Boolean = when (val declaration = element.parent) {
     is KtClass -> declaration.nameIdentifier === element
     is KtNamedFunction -> declaration.nameIdentifier === element
@@ -157,7 +159,9 @@ internal fun getTestFederationDeclarationSchedule(declaration: KtNamedDeclaratio
         )
     }
 
-/* Java [PsiClass] / [PsiMethod] counterpart of the Kotlin overload above. */
+/**
+ * Java [PsiClass] / [PsiMethod] counterpart of the Kotlin overload above.
+ */
 internal fun getTestFederationDeclarationSchedule(member: PsiMember): TestFederationDeclarationSchedule? =
     CachedValuesManager.getCachedValue(member) {
         CachedValueProvider.Result.create(
