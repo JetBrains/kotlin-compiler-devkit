@@ -1,4 +1,13 @@
 <idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Remote Run"
+                    anchor="bottom"
+                    icon="/icons/toolWindowRemoteRun.svg"
+                    factoryClass="org.jetbrains.kotlin.test.helper.teamcity.RemoteRunToolWindowFactory"
+                    secondary="false"
+                    canCloseContents="false"/>
+    </extensions>
+
     <actions>
         <action id="GitRebaseOnGreenMasterCommitAction"
                 class="org.jetbrains.kotlin.test.helper.actions.git.RebaseOnGreenMasterCommitAction"
