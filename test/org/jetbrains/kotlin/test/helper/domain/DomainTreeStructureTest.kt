@@ -50,7 +50,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DomainTreeStructureTest : BasePlatformTestCase() {
-    /* Disk-only cleanup must not leave stale VFS entries in a reused project. */
+    /**
+     * Disk-only cleanup must not leave stale VFS entries in a reused project.
+     */
     private val projectDescriptor = LightProjectDescriptor()
 
     override fun getProjectDescriptor(): LightProjectDescriptor = projectDescriptor

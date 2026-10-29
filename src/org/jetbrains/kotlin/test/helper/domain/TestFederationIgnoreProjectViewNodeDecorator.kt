@@ -15,7 +15,7 @@ import javax.swing.SwingConstants
 private val ignoredBadgeIcon: Icon =
     IconLoader.getIcon("/icons/test_federation_ignored.svg", TestFederationIgnoreProjectViewNodeDecorator::class.java)
 
-/*
+/**
  * Badges files ignored by `repo/domains.yaml`.
  * Also covers Domain pane nodes: the platform runs decorators from PSI-based node updates,
  * which `DomainFileNode` and the `PsiDirectoryNode` delegate of `DomainDirectoryNode` perform.
@@ -32,7 +32,9 @@ internal class TestFederationIgnoreProjectViewNodeDecorator : ProjectViewNodeDec
     }
 }
 
-/* Idempotent, so the YAML decorator and the dump-based Domain badge can both apply to one node. */
+/**
+ * Idempotent, so the YAML decorator and the dump-based Domain badge can both apply to one node.
+ */
 internal fun PresentationData.markFederationIgnored() {
     getIcon(false)?.let { setIcon(federationIgnoredIcon(it)) }
     val ignoredTooltip = MyBundle.message("test.federation.ignored.tooltip")

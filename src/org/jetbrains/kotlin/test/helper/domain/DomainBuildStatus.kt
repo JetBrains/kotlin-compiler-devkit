@@ -9,7 +9,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import javax.swing.Icon
 
-/* Latest finished build on the default branch for every build type in Kotlin_KotlinDev (guest access). */
+/**
+ * Latest finished build on the default branch for every build type in Kotlin_KotlinDev (guest access).
+ */
 internal const val DOMAIN_BUILD_STATUSES_URL: String =
     "https://buildserver.labs.intellij.net/guestAuth/app/rest/buildTypes" +
         "?locator=project:(id:Kotlin_KotlinDev)" +
@@ -35,9 +37,9 @@ internal fun domainBuildStatusIcon(status: DomainBuildStatus?): Icon = when {
     else -> domainBuildFailureIcon
 }
 
-/*
-Keys are domains named by the build type id without [DOMAIN_BUILD_TYPE_ID_PREFIX].
-Returns null if [json] is not a readable response, so callers can tell it apart from a valid response without builds.
+/**
+ * Keys are domains named by the build type id without [DOMAIN_BUILD_TYPE_ID_PREFIX].
+ * Returns null if [json] is not a readable response, so callers can tell it apart from a valid response without builds.
  */
 internal fun parseDomainBuildStatuses(json: String): Map<Domain, DomainBuildStatus>? {
     val root = try {

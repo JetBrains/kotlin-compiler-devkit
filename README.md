@@ -151,6 +151,20 @@ Conflicting schedules are reported as warnings: contract tags on a smoke test ar
 smoke or contract schedule before merging. Suppress them with `@Suppress("TestFederationRedundantContract")` or
 `@Suppress("TestFederationNightlyConflict")` (also offered via Alt+Enter), or disable the inspections in the settings.
 
+### Remote Run Tool Window
+
+> **Note:** Requires the bundled Git plugin and the
+> [TeamCity CLI](https://www.jetbrains.com/help/teamcity/teamcity-cli-get-started.html) (`teamcity` 1.6.1 or newer).
+
+The "Remote Run" tool window launches and follows the aggregate TeamCity test run (the same run as a GitHub `/dry-run`):
+
+- **Launch Test Run** runs the checked out branch; right-click any branch to run it instead.
+- Builds show their status, test counts and elapsed time; failed tests can be expanded and navigated to.
+- Branches can be searched; their icon shows the latest run status.
+- Running builds can be stopped; a new launch offers to stop unfinished runs on the same branch.
+
+See [docs/remote-run.md](docs/remote-run.md) for details.
+
 <!-- Plugin description end -->
 
 ## Build plugin from sources

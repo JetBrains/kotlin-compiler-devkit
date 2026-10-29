@@ -35,7 +35,7 @@ private data class CachedIgnoreRules(
     val rules: List<TestFederationIgnoreRule>,
 )
 
-/*
+/**
  * Single entry point for YAML ignore checks: finds `repo/domains.yaml` once per call
  * and returns before creating the service, and its listener, in projects without it.
  */
@@ -45,7 +45,9 @@ internal fun isIgnoredByTestFederation(project: Project, file: VirtualFile): Boo
     return TestFederationIgnoreService.getInstance(project).isIgnored(repositoryRoot, file)
 }
 
-/* The project root, if it contains `repo/domains.yaml` as a file. */
+/**
+ * The project root, if it contains `repo/domains.yaml` as a file.
+ */
 private fun findTestFederationRepositoryRoot(project: Project): RepositoryRoot? {
     val candidate = project.basePath
         ?.let(FileUtil::toSystemIndependentName)
@@ -73,7 +75,9 @@ class TestFederationIgnoreService(private val project: Project) : Disposable {
 
     private val domainsYamlListenerInstalled = AtomicBoolean(false)
 
-    /* [repositoryRoot] is the project root, which contains `repo/domains.yaml`. */
+    /**
+     * [repositoryRoot] is the project root, which contains `repo/domains.yaml`.
+     */
     internal fun isIgnored(repositoryRoot: RepositoryRoot, file: VirtualFile): Boolean {
         installConfigurationListener()
         if (!VfsUtil.isAncestor(repositoryRoot.file, file, false)) return false
@@ -89,7 +93,9 @@ class TestFederationIgnoreService(private val project: Project) : Disposable {
         cachedIgnoreRules = null
     }
 
-    /* Installed once the marker is first seen; it stays to refresh the view on later edits or removal. */
+    /**
+     * Installed once the marker is first seen; it stays to refresh the view on later edits or removal.
+     */
     private fun installConfigurationListener() {
         if (!domainsYamlListenerInstalled.compareAndSet(false, true)) return
         project.messageBus.connect(this).subscribe(
