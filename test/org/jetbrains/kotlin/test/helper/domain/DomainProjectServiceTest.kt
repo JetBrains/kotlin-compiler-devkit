@@ -33,7 +33,9 @@ class DomainProjectServiceTest : BasePlatformTestCase() {
         assertFalse(isDumpPathAffected(dumpPath, listOf("/outside/repo/domains.dump.txt")))
     }
 
-    /* VFS events have no public constructors; they are only built here as plain inputs for the classifier. */
+    /**
+     * VFS events have no public constructors; they are only built here as plain inputs for the classifier.
+     */
     @Suppress("UnstableApiUsage")
     fun testFileContentChangesAreNotStructuralRepositoryChanges() {
         val oldParent = MockVirtualFile.dir("old")

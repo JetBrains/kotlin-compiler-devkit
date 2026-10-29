@@ -37,10 +37,14 @@ class DomainBuildStatusService(private val project: Project, private val scope: 
     @Volatile
     private var statuses: Map<Domain, DomainBuildStatus> = emptyMap()
 
-    /* Guarded by `this`, like every write to [statuses]; null while polling is inactive. */
+    /**
+     * Guarded by `this`, like every write to [statuses]; null while polling is inactive.
+     */
     private var pollingJob: Job? = null
 
-    /* Replaced in tests to avoid network access. */
+    /**
+     * Replaced in tests to avoid network access.
+     */
     internal var fetchStatuses: suspend () -> Map<Domain, DomainBuildStatus> = ::fetchStatusesOrEmpty
 
     private val httpClient: HttpClient by lazy {
@@ -55,11 +59,11 @@ class DomainBuildStatusService(private val project: Project, private val scope: 
     internal val isPolling: Boolean
         get() = synchronized(this) { pollingJob?.isActive == true }
 
-    /*
-    Activating fetches right away and then every [pollingInterval].
-    Deactivating cancels the timer and any in-flight request. Repeated calls with the same value do nothing.
-    A loop that ended unexpectedly counts as inactive, so the next activation starts a new one.
-    */
+    /**
+     * Activating fetches right away and then every [pollingInterval].
+     * Deactivating cancels the timer and any in-flight request. Repeated calls with the same value do nothing.
+     * A loop that ended unexpectedly counts as inactive, so the next activation starts a new one.
+     */
     @Synchronized
     fun setPollingActive(active: Boolean) {
         if (pollingJob?.isActive == active) return
@@ -87,16 +91,18 @@ class DomainBuildStatusService(private val project: Project, private val scope: 
         }
     }
 
-    /*
-    Published outside the lock, so listeners never run while holding it.
-    Listeners read the latest [statuses], so the order of concurrent publishes does not matter.
-    */
+    /**
+     * Published outside the lock, so listeners never run while holding it.
+     * Listeners read the latest [statuses], so the order of concurrent publishes does not matter.
+     */
     private fun publishModelChanged() {
         if (project.isDisposed) return
         project.messageBus.syncPublisher(DomainProjectService.MODEL_CHANGED_TOPIC).domainModelChanged()
     }
 
-    /* The real fetch; internal so tests can restore it after replacing [fetchStatuses]. */
+    /**
+     * The real fetch; internal so tests can restore it after replacing [fetchStatuses].
+     */
     internal suspend fun fetchStatusesOrEmpty(): Map<Domain, DomainBuildStatus> {
         val request = HttpRequest.newBuilder()
             .uri(URI.create(DOMAIN_BUILD_STATUSES_URL))
@@ -124,7 +130,9 @@ class DomainBuildStatusService(private val project: Project, private val scope: 
     }
 }
 
-/* Returns null if the response is not usable (non-200 or unreadable body). */
+/**
+ * Returns null if the response is not usable (non-200 or unreadable body).
+ */
 internal fun domainBuildStatusesFromResponse(statusCode: Int, body: String?): Map<Domain, DomainBuildStatus>? {
     if (statusCode != 200 || body == null) return null
     return parseDomainBuildStatuses(body)

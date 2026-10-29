@@ -27,7 +27,9 @@ import javax.swing.JTree
 private const val IGNORED_TOOLTIP = "Ignored by test federation"
 
 class TestFederationIgnoreProjectViewNodeDecoratorTest : BasePlatformTestCase() {
-    /* A fresh project per test, so service-creation assertions do not depend on other tests. */
+    /**
+     * A fresh project per test, so service-creation assertions do not depend on other tests.
+     */
     override fun getProjectDescriptor(): LightProjectDescriptor = LightProjectDescriptor()
 
     fun testMarkerAbsentProjectDoesNotCreateIgnoreService() {

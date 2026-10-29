@@ -88,7 +88,9 @@ class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsync
         super.dispose()
     }
 
-    /* Build statuses are polled only while a Domain pane is selected in a visible Project tool window. */
+    /**
+     * Build statuses are polled only while a Domain pane is selected in a visible Project tool window.
+     */
     private fun followBuildStatusPollingActivity(project: Project) {
         val connection = project.messageBus.connect(this)
 
@@ -130,7 +132,9 @@ class DomainProjectViewPane(project: Project) : AbstractProjectViewPaneWithAsync
         DomainTreeStructure(myProject, getId())
 }
 
-/* Checks for any Domain pane instance, so that several instances never disagree about polling. */
+/**
+ * Checks for any Domain pane instance, so that several instances never disagree about polling.
+ */
 private fun isDomainPaneShown(project: Project): Boolean {
     if (ProjectView.getInstance(project).currentProjectViewPane !is DomainProjectViewPane) return false
 
@@ -141,7 +145,9 @@ private fun isDomainPaneShown(project: Project): Boolean {
 private class DomainProjectViewSelectInTarget(project: Project) : ProjectViewSelectInTarget(project), DumbAware {
     override fun getMinorViewId(): String = DomainProjectViewPane.VIEW_ID
 
-    /* Between StandardTargetWeights.PROJECT_WEIGHT and StandardTargetWeights.PACKAGES_WEIGHT. */
+    /**
+     * Between StandardTargetWeights.PROJECT_WEIGHT and StandardTargetWeights.PACKAGES_WEIGHT.
+     */
     override fun getWeight(): Float = 1.5f
 
     override fun toString(): String = "Domain Project View"
@@ -532,7 +538,9 @@ private fun AbstractTreeNode<*>.attachTo(parent: AbstractTreeNode<*>) {
 
 private val bracketedNamesPattern = Regex("\\s*\\[([^]]+)]")
 
-/* Only bracketed names are looked up, so no module enumeration or cache invalidation is needed. */
+/**
+ * Only bracketed names are looked up, so no module enumeration or cache invalidation is needed.
+ */
 internal fun withoutBracketedModuleNames(text: String?, isModuleName: (String) -> Boolean): String? {
     if (text == null || '[' !in text) return text
     val cleaned = text.replace(bracketedNamesPattern) { match ->
