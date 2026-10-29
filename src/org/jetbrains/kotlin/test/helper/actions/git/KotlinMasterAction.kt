@@ -5,7 +5,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.rd.util.lifetime
 import git4idea.GitBranch
 import git4idea.actions.branch.GitSingleBranchAction
-import git4idea.repo.GitRemote
 import git4idea.repo.GitRepository
 import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.test.helper.git.Git
@@ -17,7 +16,7 @@ abstract class KotlinMasterAction : GitSingleBranchAction() {
 
     override fun isEnabledForRef(ref: GitBranch, repositories: List<GitRepository>) =
         repositories.all { it.isOnBranch }
-            && chooseRepository(repositories)?.isPublicKotlinMonorepo() == true
+            && chooseRepository(repositories)?.let { Git.isPublicKotlinMonorepo(it) } == true
             && ref.name == Git.MAIN_BRANCH
             && super.isEnabledForRef(ref, repositories)
 
@@ -34,10 +33,4 @@ abstract class KotlinMasterAction : GitSingleBranchAction() {
     }
 
     abstract suspend fun actionPerformedOnMaster(e: AnActionEvent, project: Project, repository: GitRepository, reference: GitBranch)
-
-    private fun GitRepository.isPublicKotlinMonorepo() =
-        remotes.any { it.isPublicKotlinMonorepo() }
-
-    private fun GitRemote.isPublicKotlinMonorepo() =
-        this.urls.any { it.matches(Git.KOTLIN_MONOREPO_REMOTE) }
 }
