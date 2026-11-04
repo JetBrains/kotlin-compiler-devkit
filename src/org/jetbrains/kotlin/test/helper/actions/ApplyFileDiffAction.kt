@@ -14,6 +14,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.command.writeCommandAction
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
@@ -133,6 +134,9 @@ enum class ApplyDiffResult {
 }
 
 suspend fun applyDiffs(tests: Array<out AbstractTestProxy>, project: Project): ApplyDiffResult {
+    val fileDocumentManager = FileDocumentManager.getInstance()
+    val psiDocumentManager = PsiDocumentManager.getInstance(project)
+
     val diffsByFile = tests
         .flatMap { it.collectDiffsRecursively(mutableListOf()) }
         .groupBy { it.filePath }
@@ -144,16 +148,28 @@ suspend fun applyDiffs(tests: Array<out AbstractTestProxy>, project: Project): A
     writeCommandAction(project, "Applying Diffs") {
         for ((filePath, diffs) in diffsByFile) {
             if (filePath == null) continue
-            val document = VfsUtil.findFile(Paths.get(filePath), true)?.findDocument() ?: continue
+            val virtualFile = VfsUtil.findFile(Paths.get(filePath), true) ?: continue
+            val document = virtualFile.findDocument() ?: continue
+
+            // Get base before refreshing VFS so that direct modifications on disk aren't picked up.
+            val base = document.text
+            virtualFile.refresh(false, false)
+            fileDocumentManager.reloadFromDisk(document)
 
             val result =  if (diffs.size == 1) {
-                StringUtilRt.convertLineSeparators(diffs.single().right, "\n")
+                val diff = diffs.single()
+                autoMerge(
+                    left = StringUtilRt.convertLineSeparators(diff.left, "\n"),
+                    base = StringUtilRt.convertLineSeparators(base, "\n"),
+                    right = StringUtilRt.convertLineSeparators(diff.right, "\n"),
+                    onConflict = {
+                        result = ApplyDiffResult.HAS_CONFLICT
+                    }
+                )
             } else {
-                val first = diffs.first()
-                val base = first.left
                 diffs
                     .windowed(2)
-                    .fold(first.right) { acc, (_, right) ->
+                    .fold(diffs.first().right) { acc, (_, right) ->
                         autoMerge(
                             left = StringUtilRt.convertLineSeparators(acc, "\n"),
                             base = StringUtilRt.convertLineSeparators(base, "\n"),
@@ -166,7 +182,8 @@ suspend fun applyDiffs(tests: Array<out AbstractTestProxy>, project: Project): A
             }
 
             document.replaceString(0, document.textLength, result)
-            PsiDocumentManager.getInstance(project).commitDocument(document)
+            psiDocumentManager.commitDocument(document)
+            fileDocumentManager.saveDocument(document)
         }
     }
 
