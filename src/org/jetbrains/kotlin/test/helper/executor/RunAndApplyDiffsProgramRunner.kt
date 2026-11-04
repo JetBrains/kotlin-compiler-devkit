@@ -30,7 +30,7 @@ class RunAndApplyDiffsProgramRunner : ProgramRunner<Nothing> {
         val defaultExecutor = DefaultRunExecutor.getRunExecutorInstance()
 
         val service = project.service<TestDataRunnerService>()
-        service.scope.launch {
+        service.launchExclusively {
             withBackgroundProgress(project, "Running and Applying Diffs") {
                 reportSequentialProgress { reporter ->
                     reporter.indeterminateStep("Running")

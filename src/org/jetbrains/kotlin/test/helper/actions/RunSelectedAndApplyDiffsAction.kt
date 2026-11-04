@@ -23,7 +23,7 @@ class RunSelectedAndApplyDiffsAction : GradleOnlyAction(), DumbAware {
         val files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)?.toList() ?: return
 
         val service = project.service<TestDataRunnerService>()
-        service.scope.launch {
+        service.launchExclusively {
             withBackgroundProgress(project, "Running Specific & Applying Diffs") {
                 val result = service.selectTestMethods(files, e) ?: return@withBackgroundProgress
                 val commandLine = smartReadAction(service.project) {

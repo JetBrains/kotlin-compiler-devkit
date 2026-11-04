@@ -260,7 +260,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         val service = project.service<TestDataRunnerService>()
         val hasGradleRunner = project.hasGradleTestRunner(baseEditor.file)
         val currentIndex = state.currentChosenGroup
-        service.scope.launch {
+        service.launchExclusively {
             withBackgroundProgress(project, "Running Selected & Applying Diffs") {
                 reportSequentialProgress { reporter ->
                     reporter.indeterminateStep("Running Selected")
@@ -373,7 +373,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                 override fun actionPerformed(e: AnActionEvent) {
                     val project = e.project ?: return
                     val service = project.service<TestDataRunnerService>()
-                    service.scope.launch {
+                    service.launchExclusively {
                         withBackgroundProgress(project, "Generating Tests, Running All & Applying Diffs") {
                             reportSequentialProgress { reporter ->
                                 reporter.nextStep(33)

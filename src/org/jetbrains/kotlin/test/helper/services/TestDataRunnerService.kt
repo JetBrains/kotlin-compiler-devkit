@@ -15,7 +15,9 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.util.parentsOfType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
@@ -38,6 +40,15 @@ class TestDataRunnerService(
     val project: Project,
     val scope: CoroutineScope
 ) {
+    private var exclusiveJob: Job? = null
+
+    fun launchExclusively(f: suspend CoroutineScope.() -> Unit) {
+        scope.launch {
+            exclusiveJob?.cancelAndJoin()
+            exclusiveJob = launch(block = f)
+        }
+    }
+
     fun collectAndRunAllTests(
         e: AnActionEvent,
         files: List<VirtualFile>?,

@@ -20,11 +20,9 @@ import git4idea.commands.GitCommand
 import git4idea.commands.GitLineHandler
 import git4idea.repo.GitRepositoryManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.TestDataType
 import org.jetbrains.kotlin.test.helper.getTestDataType
-import org.jetbrains.kotlin.test.helper.gradle.generateTestsAndWait
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 
 class CreateReproducerCommitAction : RunSelectedFilesActionBase() {
@@ -40,7 +38,7 @@ class CreateReproducerCommitAction : RunSelectedFilesActionBase() {
         )?.trim()?.ifBlank { null } ?: return
 
         val service = project.service<TestDataRunnerService>()
-        service.scope.launch {
+        service.launchExclusively {
             withBackgroundProgress(project, "Creating Reproducer Commit for $ticketNumber") {
                 reportSequentialProgress { reporter ->
                     reporter.nextStep(33) {

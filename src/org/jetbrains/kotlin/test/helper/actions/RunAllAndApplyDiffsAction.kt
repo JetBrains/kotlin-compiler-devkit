@@ -15,7 +15,7 @@ class RunAllAndApplyDiffsAction : GradleOnlyAction(), DumbAware {
         val files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)?.toList() ?: return
 
         val service = project.service<TestDataRunnerService>()
-        service.scope.launch {
+        service.launchExclusively {
             withBackgroundProgress(project, "Running All Tests & Applying Diffs") {
                 reportSequentialProgress { reporter ->
                     reporter.indeterminateStep("Running All Tests")
