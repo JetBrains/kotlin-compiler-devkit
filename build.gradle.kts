@@ -1,5 +1,6 @@
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -9,6 +10,7 @@ val publishingToken = extra["publishingToken"] as String
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    kotlin("plugin.serialization")
     id("org.jetbrains.intellij.platform")
     id("org.jetbrains.changelog") apply false
 }
@@ -26,6 +28,7 @@ dependencies {
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.jetbrains.plugins.gradle")
         bundledPlugin("Git4Idea")
+        bundledPlugin("com.intellij.mcpServer")
     }
 
     testImplementation(libs.junit)
@@ -100,4 +103,9 @@ sourceSets {
 
 (tasks["runIde"] as JavaExec).apply {
     maxHeapSize = "3g"
+}
+
+intellijPlatformTesting.runIde.register("runIde262") {
+    type = IntelliJPlatformType.IntellijIdea
+    version = "2026.2"
 }

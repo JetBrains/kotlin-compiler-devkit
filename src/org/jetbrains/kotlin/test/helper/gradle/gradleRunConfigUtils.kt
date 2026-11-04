@@ -28,6 +28,10 @@ class GradleRunConfig(
 
 fun runGradleCommandLineCancellable(e: AnActionEvent, config: GradleRunConfig): CancellationCallback {
     val project = e.project ?: return {}
+    return runGradleCommandLineCancellable(project, config)
+}
+
+fun runGradleCommandLineCancellable(project: Project, config: GradleRunConfig): () -> Unit {
     val runnerAndConfigurationSettings = runGradleCommandLine(project, config) ?: return {}
 
     return runnerAndConfigurationSettings.createCancellationCallback(project)

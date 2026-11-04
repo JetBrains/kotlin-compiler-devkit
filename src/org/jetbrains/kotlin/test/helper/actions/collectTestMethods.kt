@@ -11,9 +11,12 @@ import com.intellij.psi.PsiModifierListOwner
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
+import com.intellij.psi.util.parentsOfType
 import org.jetbrains.kotlin.idea.base.util.parentsWithSelf
+import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.TestDataType
 import org.jetbrains.kotlin.test.helper.asPathWithoutAllExtensions
+import org.jetbrains.kotlin.test.helper.buildRunnerLabel
 import org.jetbrains.kotlin.test.helper.getTestDataType
 import org.jetbrains.kotlin.test.helper.isTestDataFile
 import org.jetbrains.kotlin.test.helper.nameWithoutAllExtensions
@@ -42,6 +45,19 @@ sealed class TestDescription {
         val fileOfParentPsi: VirtualFile,
     ) : TestDescription()
 }
+
+fun collectAndGroupTestDescriptions(files: List<VirtualFile>, project: Project): Map<String, List<TestDescription>> {
+    val testDeclarations = filterAndCollectTestDescriptions(files, project)
+    return groupTests(testDeclarations, project)
+}
+
+fun groupTests(testDeclarations: List<TestDescription>, project: Project): Map<String, List<TestDescription>> {
+    val testTags = TestDataPathsConfiguration.getInstance(project).testTags
+    return testDeclarations
+        .groupBy { it.psi.parentsOfType<PsiClass>().last() }
+        .mapKeys { it.key.buildRunnerLabel(testTags) }
+}
+
 
 fun filterAndCollectTestDescriptions(files: List<VirtualFile>?, project: Project): List<TestDescription> {
     if (files == null) return emptyList()

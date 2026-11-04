@@ -27,7 +27,7 @@ abstract class AbstractModifyTestFileAction : DumbAwareAction() {
         val context = e.dataContext
         val tests = AbstractTestProxy.DATA_KEYS.getData(context).orEmpty()
         presentation.isEnabledAndVisible = tests
-            .flatMap { it.collectDiffsRecursively(mutableListOf()) }
+            .flatMap { it.collectDiffsRecursively() }
             .any { acceptDiff(it) }
     }
 
@@ -36,7 +36,7 @@ abstract class AbstractModifyTestFileAction : DumbAwareAction() {
         val project = e.project ?: return
         project.lifetime.coroutineScope.launch {
             val paths = tests
-                .flatMap { it.collectDiffsRecursively(mutableListOf()) }
+                .flatMap { it.collectDiffsRecursively() }
                 .filter { acceptDiff(it) }
                 .mapNotNull { it.filePath }
                 .distinct()

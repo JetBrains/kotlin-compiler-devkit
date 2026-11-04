@@ -27,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jetbrains.kotlin.test.helper.collectDiffsRecursively
+import org.jetbrains.kotlin.test.helper.isPassedOrIgnored
 import java.nio.file.Paths
 import kotlin.coroutines.resume
 
@@ -62,18 +63,19 @@ object NoopCancellationCallback : CancellationCallback {
 context(scope: CoroutineScope)
 suspend fun runTestAndApplyDiffLoop(
     project: Project,
+    isInteractive: Boolean = true,
     runTests: suspend () -> CancellationCallback?,
-) {
+): SMTestProxy.SMRootTestProxy {
     while (true) {
         val cb = runTests()
 
         val testProxy = awaitTestRun(project, cb)
-        if (testProxy.isPassed || testProxy.isIgnored) break
+        if (testProxy.isPassedOrIgnored) return testProxy
 
         val result = applyDiffs(arrayOf(testProxy), project)
 
         if (result != ApplyDiffResult.SUCCESS) {
-            val shouldContinue = suspendCancellableCoroutine {
+            val shouldContinue = !isInteractive || suspendCancellableCoroutine {
                 val notification = NotificationGroupManager.getInstance()
                     .getNotificationGroup("Kotlin Compiler DevKit Run Apply")
                     .createNotification(
@@ -105,13 +107,13 @@ suspend fun runTestAndApplyDiffLoop(
                 it.invokeOnCancellation { notification.expire() }
             }
 
-            if (!shouldContinue) break
+            if (!shouldContinue) return testProxy
         }
     }
 }
 
 context(scope: CoroutineScope)
-private suspend fun awaitTestRun(project: Project, onCancel: CancellationCallback?): SMTestProxy.SMRootTestProxy {
+suspend fun awaitTestRun(project: Project, onCancel: CancellationCallback?): SMTestProxy.SMRootTestProxy {
     return suspendCancellableCoroutine {
         val connection = project.messageBus.connect(scope)
         connection
@@ -138,7 +140,7 @@ suspend fun applyDiffs(tests: Array<out AbstractTestProxy>, project: Project): A
     val psiDocumentManager = PsiDocumentManager.getInstance(project)
 
     val diffsByFile = tests
-        .flatMap { it.collectDiffsRecursively(mutableListOf()) }
+        .flatMap { it.collectDiffsRecursively() }
         .groupBy { it.filePath }
         .mapValues { it.value.distinctBy { diff -> diff.right } }
 

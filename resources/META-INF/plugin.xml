@@ -10,6 +10,7 @@
     <depends>com.intellij.gradle</depends>
     <depends>org.jetbrains.plugins.gradle</depends>
     <depends optional="true" config-file="git4idea-integration.xml">Git4Idea</depends>
+    <depends optional="true" config-file="mcp.xml">com.intellij.mcpServer</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 

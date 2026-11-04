@@ -11,8 +11,6 @@ import com.intellij.openapi.ui.popup.LightweightWindowEvent
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.ide.progress.withBackgroundProgress
 import com.intellij.platform.util.progress.reportSequentialProgress
-import com.intellij.psi.PsiClass
-import com.intellij.psi.util.parentsOfType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,12 +18,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.actions.CancellationCallback
 import org.jetbrains.kotlin.test.helper.actions.FavoriteTestRunnersService
 import org.jetbrains.kotlin.test.helper.actions.TestDescription
 import org.jetbrains.kotlin.test.helper.actions.filterAndCollectTestDescriptions
-import org.jetbrains.kotlin.test.helper.buildRunnerLabel
+import org.jetbrains.kotlin.test.helper.actions.collectAndGroupTestDescriptions
+import org.jetbrains.kotlin.test.helper.actions.groupTests
 import org.jetbrains.kotlin.test.helper.gradle.GradleRunConfig
 import org.jetbrains.kotlin.test.helper.gradle.computeGradleCommandLine
 import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLine
@@ -78,7 +76,7 @@ class TestDataRunnerService(
                         .ifEmpty { return@smartReadAction null }
 
                     val filtered = if (!filterByClass.isNullOrEmpty()) {
-                        groupTests(testDeclarations)[filterByClass] ?: testDeclarations
+                        groupTests(testDeclarations, project)[filterByClass] ?: testDeclarations
                     } else {
                         testDeclarations
                     }
@@ -118,8 +116,7 @@ class TestDataRunnerService(
                 reporter.indeterminateStep("Collecting tests")
 
                 smartReadAction(project) {
-                    val testDeclarations = filterAndCollectTestDescriptions(files, project)
-                    groupTests(testDeclarations)
+                    collectAndGroupTestDescriptions(files, project)
                 }
             }
         }
@@ -183,13 +180,5 @@ class TestDataRunnerService(
             )
             runGradleCommandLine(e, config)
         }
-    }
-
-
-    private fun groupTests(testDeclarations: List<TestDescription>): Map<String, List<TestDescription>> {
-        val testTags = TestDataPathsConfiguration.getInstance(project).testTags
-        return testDeclarations
-            .groupBy { it.psi.parentsOfType<PsiClass>().last() }
-            .mapKeys { it.key.buildRunnerLabel(testTags) }
     }
 }
