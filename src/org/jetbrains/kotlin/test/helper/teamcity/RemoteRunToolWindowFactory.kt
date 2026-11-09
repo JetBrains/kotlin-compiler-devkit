@@ -326,7 +326,7 @@ private class RemoteRunToolWindowPanel(
 
         tree.addMouseListener(object : PopupHandler() {
             override fun invokePopup(component: Component, x: Int, y: Int) {
-                val clickedPath = tree.getPathForLocation(x, y) ?: return
+                val clickedPath = treePathForContextMenuAt(tree, x, y) ?: return
                 tree.selectionPath = clickedPath
 
                 when (clickedPath.lastPathComponent) {
@@ -1061,4 +1061,13 @@ private class RemoteRunToolWindowPanel(
             StringUtil.escapeXmlEntities(tooltipWithSafeMerge.trimEnd()).replace("\n", "<br>")
         )
     }
+}
+
+internal fun treePathForContextMenuAt(tree: JTree, x: Int, y: Int): TreePath? {
+    if (x !in 0 until tree.width) return null
+
+    val path = tree.getClosestPathForLocation(x, y) ?: return null
+    val rowBounds = tree.getPathBounds(path) ?: return null
+
+    return path.takeIf { y >= rowBounds.y && y < rowBounds.y + rowBounds.height }
 }
