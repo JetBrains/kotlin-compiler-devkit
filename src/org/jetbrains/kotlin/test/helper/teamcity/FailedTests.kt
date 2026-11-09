@@ -3,6 +3,7 @@ package org.jetbrains.kotlin.test.helper.teamcity
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.NavigatablePsiElement
+import com.intellij.psi.PsiClass
 import com.intellij.psi.search.GlobalSearchScope
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -20,6 +21,11 @@ internal data class FailedTest(
     val displayName: String,
     val isMuted: Boolean,
     val buildTypeName: String?,
+)
+
+internal data class FailedTestClassGroup(
+    val classFqName: String?,
+    val tests: List<FailedTest>,
 )
 
 internal data class FailedTestsResult(
@@ -62,10 +68,17 @@ internal fun failedTestClassFqName(test: FailedTest): String? {
     return qualifiedName.replace('$', '.')
 }
 
+internal fun groupFailedTestsByClass(tests: List<FailedTest>): List<FailedTestClassGroup> =
+    tests.groupBy(::failedTestClassFqName).map { (classFqName, classTests) ->
+        FailedTestClassGroup(classFqName, classTests)
+    }
+
+internal fun findFailedTestClass(project: Project, classFqName: String): PsiClass? =
+    JavaPsiFacade.getInstance(project).findClass(classFqName, GlobalSearchScope.allScope(project))
+
 internal fun findFailedTestTarget(project: Project, test: FailedTest): NavigatablePsiElement? {
     val classFqName = failedTestClassFqName(test) ?: return null
-    val psiClass = JavaPsiFacade.getInstance(project)
-        .findClass(classFqName, GlobalSearchScope.allScope(project)) ?: return null
+    val psiClass = findFailedTestClass(project, classFqName) ?: return null
     val methodName = test.methodName ?: return psiClass
 
     return psiClass.findMethodsByName(methodName, true).firstOrNull() ?: psiClass
