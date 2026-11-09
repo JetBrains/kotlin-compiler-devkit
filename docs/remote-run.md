@@ -14,8 +14,8 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
 - **Launch Test Run** (toolbar) always runs the checked out branch. Right-click a branch to run another one.
 - All local branches are listed: the current branch first, then branches by their latest run, then the rest by name.
   The search field filters them like the Git branches popup.
-- Besides the runs launched from the IDE, the newest aggregate TeamCity builds of every local branch are shown;
-  they are fetched on every refresh and kept in memory only.
+- Besides the runs launched from the IDE, the newest aggregate TeamCity builds of the 10 most recently checked out
+  branches are shown; they are fetched on every refresh and kept in memory only.
 - A branch with a known run shows the latest status instead of the branch icon (spinner, success or failure).
 - Build rows show test counts and, while scheduling or running, the elapsed time.
 - Expand a failed build to list its failed tests; double-click a test to open it in the editor.
@@ -30,10 +30,10 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
 | `RemoteRunToolWindowFactory.kt` | Tool window UI: tree, search field, renderer, toolbar and context menu actions |
 | `TeamCityTestLaunchService.kt` | Launch and stop flow: checks, dialogs, progress, CLI calls |
 | `TeamCityCli.kt` | Command lines and output parsing for the `teamcity` CLI |
-| `GitCommandFacade.kt` | Picks the TeamCity remote and computes the branch push state |
+| `GitCommandFacade.kt` | Picks the TeamCity remote, computes the branch push state, reads the recently checked out branches |
 | `RememberedTeamCityBuild.kt` | Persists launched builds per project |
 | `TeamCityBuildStatusService.kt` | Polls build statuses and failed tests |
-| `TeamCityBranchBuilds.kt` | Fetches the aggregate builds of the local branches and the build queue |
+| `TeamCityBranchBuilds.kt` | Fetches the aggregate builds of the recently checked out branches and the build queue |
 | `TeamCityBuildStatus.kt`, `FailedTests.kt` | REST URLs, JSON parsing, status icons |
 
 ### Launching
@@ -50,7 +50,8 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
 ### Following a build
 
 - Launched builds (the 50 newest) are stored in the workspace file (`KotlinDevKitTeamCityBuilds`).
-- Every refresh round also fetches the newest 5 aggregate builds of each local branch via guest REST
+- Every refresh round also fetches the newest 5 aggregate builds of the 10 most recently checked out branches
+  (current branch included; read from the HEAD reflog) via guest REST
   (`buildType:Kotlin_KotlinDev_Aggregate`, `branch:<name>`; `master` queries the default branch; running and
   canceled chains are included) plus the
   aggregate build queue, since queued builds are not served by the builds endpoint. Fetched builds live in

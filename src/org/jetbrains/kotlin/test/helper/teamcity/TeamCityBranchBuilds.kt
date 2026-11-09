@@ -19,6 +19,11 @@ internal const val AGGREGATE_BUILD_TYPE_ID: String = "Kotlin_KotlinDev_Aggregate
 internal const val FETCHED_BUILDS_PER_BRANCH: Int = 5
 
 /**
+ * How many of the most recently checked out local branches get their aggregate builds fetched.
+ */
+internal const val FETCHED_RECENT_BRANCH_COUNT: Int = 10
+
+/**
  * TeamCity reports the default branch as `<default>`; the default branch of the Kotlin monorepo is 'master'.
  */
 internal const val DEFAULT_SERVER_BRANCH_NAME: String = "<default>"

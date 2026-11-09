@@ -10,6 +10,7 @@ import kotlinx.coroutines.*
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import org.jetbrains.kotlin.test.helper.git.Git
 import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
 
 internal fun interface BuildStatusesListener {
@@ -29,8 +30,8 @@ internal enum class TeamCityFetchState { IN_PROGRESS, COMPLETED, NO_BUILDS_FOUND
 /**
  * Caches the live status of every TeamCity build the tool window shows; the tool window reads only this cache.
  *
- * That covers the remembered builds launched from the IDE and the latest aggregate builds of the local
- * branches, which are fetched in the same rounds and kept in memory only (never persisted).
+ * That covers the remembered builds launched from the IDE and the latest aggregate builds of the most
+ * recently checked out branches, which are fetched in the same rounds and kept in memory only (never persisted).
  * Everything is fetched via guest REST while [setPollingActive] is on (the Remote Run tool window is
  * visible), plus once per [requestRefresh] (the refresh button, or right after launching a build).
  * Finished builds are final, so their statuses are fetched only until their finished status is known.
@@ -64,7 +65,8 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     private var failedTestFetchCounts: Map<String, FailedTestFetchCounts> = emptyMap()
 
     /**
-     * The latest aggregate builds fetched for the local branches; in memory only, replaced by every successful round.
+     * The latest aggregate builds fetched for the recently checked out branches; in memory only,
+     * replaced by every successful round.
      */
     @Volatile
     private var fetchedBuildsCache: List<FetchedTeamCityBuild> = emptyList()
@@ -95,14 +97,15 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     /**
      * Replaced in tests to avoid depending on a git repository.
      */
-    internal var associatedBranchNames: () -> List<String> = ::monorepoLocalBranchNames
+    internal var associatedBranchNames: suspend () -> List<String> = ::monorepoLocalBranchNames
 
     fun status(buildId: String): TeamCityBuildStatus? = statuses[buildId]
 
     fun failedTests(buildId: String): FailedTestsResult? = failedTestOccurrences[buildId]
 
     /**
-     * The aggregate builds fetched for the local branches, without their statuses (read those with [status]).
+     * The aggregate builds fetched for the recently checked out branches, without their statuses
+     * (read those with [status]).
      */
     fun fetchedBranchBuilds(): List<RememberedTeamCityBuild> =
         fetchedBuildsCache.map { fetchedBuild -> fetchedBuild.build }
@@ -337,10 +340,16 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     }
 
     /**
-     * The local branches whose aggregate runs the tool window fetches.
+     * The local branches whose aggregate runs the tool window fetches: the [FETCHED_RECENT_BRANCH_COUNT]
+     * most recently checked out branches of the monorepo, the newest checkout first.
      */
-    internal fun monorepoLocalBranchNames(): List<String> =
-        project.kotlinMonorepoRepository()?.branches?.localBranches?.map { branch -> branch.name }.orEmpty()
+    internal suspend fun monorepoLocalBranchNames(): List<String> {
+        val repository = project.kotlinMonorepoRepository() ?: return emptyList()
+
+        return with(project) {
+            Git.recentlyCheckedOutBranchNames(repository, FETCHED_RECENT_BRANCH_COUNT)
+        }
+    }
 
     /**
      * The ids of every build the tool window shows: remembered launches and fetched branch builds.
