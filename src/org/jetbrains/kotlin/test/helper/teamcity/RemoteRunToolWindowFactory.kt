@@ -443,6 +443,8 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
+    /* A failed test offers only "Navigate to Test": especially the launch action there would read
+       like running the test locally. Every action hides itself in update() when it does not apply. */
     private fun createPopupMenu(): JPopupMenu {
         val actionGroup = DefaultActionGroup(
             NavigateToFailedTestAction(),
@@ -637,6 +639,8 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
+            e.presentation.isVisible = selectedFailedTest() == null
+
             val isLaunchInFlight = TeamCityTestLaunchService.getInstance(project).isLaunchInFlight
             val targetBranchName = selectedBranchName()
 
@@ -662,6 +666,8 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
+            e.presentation.isVisible = selectedFailedTest() == null
+
             val build = selectedBuild()
             val status = build?.let { rememberedBuild ->
                 TeamCityBuildStatusService.getInstance(project).status(rememberedBuild.buildId)
@@ -711,7 +717,7 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
-            e.presentation.isEnabled = selectedFailedTest() != null
+            e.presentation.isVisible = selectedFailedTest() != null
         }
 
         override fun actionPerformed(e: AnActionEvent) {
@@ -728,6 +734,7 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
+            e.presentation.isVisible = selectedFailedTest() == null
             e.presentation.isEnabled = selectedBuild() != null
         }
 
@@ -745,6 +752,7 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
+            e.presentation.isVisible = selectedFailedTest() == null
             e.presentation.isEnabled = selectedBuild()?.let(::isRememberedBuild) == true
         }
 

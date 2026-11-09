@@ -18,7 +18,8 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   branches are shown; they are fetched on every refresh and kept in memory only.
 - A branch with a known run shows the latest status instead of the branch icon (spinner, success or failure).
 - Build rows show test counts and, while scheduling or running, the elapsed time.
-- Expand a failed build to list its failed tests; double-click a test to open it in the editor.
+- Expand a failed build to list its failed tests; double-click a test to open it in the editor. A failed test's
+  context menu only offers "Navigate to Test", which is shown only there.
 - Double-click a build to open it on TeamCity. Unfinished builds can be stopped from the context menu.
 
 ## How it works
