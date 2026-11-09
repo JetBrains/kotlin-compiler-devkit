@@ -488,6 +488,110 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
         withTimeout(5.seconds) { while (service.failedTests("1111003000") != failedTests) delay(10.milliseconds) }
     }
 
+    fun testBranchRefreshMergesBuildsThatSurviveLaterRounds() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master") }
+        val masterBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111003000", launchTimestamp = 42),
+            status = runningStatus("1111003000"),
+        )
+        val newerMasterBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111005000", launchTimestamp = 44),
+            status = runningStatus("1111005000"),
+        )
+        val featureBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111004000", launchTimestamp = 43).copy(branchName = "feature"),
+            status = runningStatus("1111004000"),
+        )
+        val branchFetchStates = Channel<TeamCityFetchState>(Channel.UNLIMITED)
+        service.fetchBranchBuilds = { branchNames ->
+            if (branchNames == listOf("master")) {
+                FetchedBranchBuildsResult(listOf(masterBuild), isFailed = false)
+            } else {
+                branchFetchStates.send(service.fetchState)
+                FetchedBranchBuildsResult(listOf(featureBuild), isFailed = false)
+            }
+        }
+        service.fetchBuildStatus = { build -> runningStatus(build.buildId) }
+
+        service.requestRefresh()
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111003000" }) delay(10.milliseconds)
+        }
+
+        service.requestBranchRefresh("feature")
+        assertEquals(TeamCityFetchState.IN_PROGRESS, withTimeout(5.seconds) { branchFetchStates.receive() })
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111004000" }) delay(10.milliseconds)
+        }
+
+        /* The next round replaces the builds of the branches it fetches and keeps the on-demand ones. */
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(listOf(newerMasterBuild), isFailed = false) }
+        service.requestRefresh()
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111005000" }) delay(10.milliseconds)
+        }
+
+        assertEquals(listOf(featureBuild.build, newerMasterBuild.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111004000"), service.status("1111004000"))
+    }
+
+    fun testFailedBranchRefreshKeepsBuildsAndSignalsFailure() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        val featureBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111004000", launchTimestamp = 43).copy(branchName = "feature"),
+            status = runningStatus("1111004000"),
+        )
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(listOf(featureBuild), isFailed = false) }
+
+        service.requestBranchRefresh("feature")
+        withTimeout(5.seconds) { while (service.fetchedBranchBuilds().isEmpty()) delay(10.milliseconds) }
+
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(emptyList(), isFailed = true) }
+        service.requestBranchRefresh("feature")
+        withTimeout(5.seconds) { while (service.fetchState != TeamCityFetchState.FAILED) delay(10.milliseconds) }
+
+        /* The last known fetched builds and statuses survive the failed on-demand refresh. */
+        assertEquals(listOf(featureBuild.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111004000"), service.status("1111004000"))
+    }
+
+    fun testStatusesOfOnDemandFetchedBuildsArePolled() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master") }
+        val featureBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111004000", launchTimestamp = 43).copy(branchName = "feature"),
+            status = runningStatus("1111004000"),
+        )
+        service.fetchBranchBuilds = { branchNames ->
+            if (branchNames == listOf("master")) {
+                FetchedBranchBuildsResult(emptyList(), isFailed = false)
+            } else {
+                FetchedBranchBuildsResult(listOf(featureBuild), isFailed = false)
+            }
+        }
+
+        service.requestBranchRefresh("feature")
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111004000" }) delay(10.milliseconds)
+        }
+        assertEquals(runningStatus("1111004000"), service.status("1111004000"))
+
+        /* Nothing but the rounds update the on-demand branch, so its unfinished builds keep being polled. */
+        val statusFetches = Channel<String>(Channel.UNLIMITED)
+        service.fetchBuildStatus = { build ->
+            statusFetches.send(build.buildId)
+            finishedSuccessfulStatus().copy(webUrl = "https://buildserver.labs.intellij.net/build/${build.buildId}")
+        }
+
+        service.requestRefresh()
+        assertEquals("1111004000", withTimeout(5.seconds) { statusFetches.receive() })
+        withTimeout(5.seconds) {
+            while (service.status("1111004000")?.state != BuildState.FINISHED) delay(10.milliseconds)
+        }
+        assertNoFurtherFetches(statusFetches)
+    }
+
     /**
      * The light project is shared between tests, so statuses, polling and the store must not leak.
      */
@@ -500,6 +604,7 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
                 service.setPollingActive(false)
                 service.fetchStatuses = service::fetchAllStatusesOrEmpty
                 service.fetchFailedTests = service::fetchFailedTestsFromTeamCity
+                service.fetchBuildStatus = service::fetchBuildStatusFromTeamCity
                 service.fetchBranchBuilds = service::fetchBranchBuildsFromTeamCity
                 service.associatedBranchNames = service::monorepoLocalBranchNames
                 service.clearFetchedBranchBuilds()

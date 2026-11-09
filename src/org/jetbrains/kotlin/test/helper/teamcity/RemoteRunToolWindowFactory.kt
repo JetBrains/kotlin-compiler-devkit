@@ -305,12 +305,26 @@ private class RemoteRunToolWindowPanel(
         tree.putClientProperty(AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
         ToolTipManager.sharedInstance().registerComponent(tree)
 
-        /* Right-clicking a row selects it first, so the popup actions apply to the clicked branch or build. */
-        val popupMenu = createPopupMenu()
+        /* Right-clicking a row selects it first, so the popup actions apply to the clicked row. Every
+           node type gets its own menu with only the actions that apply to it. */
+        val branchPopupMenu = createPopupMenu(LaunchSelectedBranchAction(), RefreshBranchAction())
+        val buildPopupMenu = createPopupMenu(
+            StopSelectedBuildAction(),
+            OpenBuildInTeamCityAction(),
+            RemoveRememberedBuildAction(),
+        )
+        val failedTestPopupMenu = createPopupMenu(NavigateToFailedTestAction())
+
         tree.addMouseListener(object : PopupHandler() {
             override fun invokePopup(component: Component, x: Int, y: Int) {
-                tree.getPathForLocation(x, y)?.let { clickedPath -> tree.selectionPath = clickedPath }
-                popupMenu.show(component, x, y)
+                val clickedPath = tree.getPathForLocation(x, y) ?: return
+                tree.selectionPath = clickedPath
+
+                when (clickedPath.lastPathComponent) {
+                    is BranchNode -> branchPopupMenu.show(component, x, y)
+                    is BuildNode, is MoreFailedTestsNode -> buildPopupMenu.show(component, x, y)
+                    is FailedTestNode -> failedTestPopupMenu.show(component, x, y)
+                }
             }
         })
 
@@ -443,16 +457,8 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
-    /* A failed test offers only "Navigate to Test": especially the launch action there would read
-       like running the test locally. Every action hides itself in update() when it does not apply. */
-    private fun createPopupMenu(): JPopupMenu {
-        val actionGroup = DefaultActionGroup(
-            NavigateToFailedTestAction(),
-            LaunchSelectedBranchAction(),
-            StopSelectedBuildAction(),
-            OpenBuildInTeamCityAction(),
-            RemoveRememberedBuildAction(),
-        )
+    private fun createPopupMenu(vararg actions: AnAction): JPopupMenu {
+        val actionGroup = DefaultActionGroup(*actions)
 
         return ActionManager.getInstance().createActionPopupMenu("RemoteRunPopup", actionGroup).component
     }
@@ -639,8 +645,6 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
-            e.presentation.isVisible = selectedFailedTest() == null
-
             val isLaunchInFlight = TeamCityTestLaunchService.getInstance(project).isLaunchInFlight
             val targetBranchName = selectedBranchName()
 
@@ -658,6 +662,27 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
+    /* Context menu action: fetches the aggregate builds of the right-clicked branch on demand. */
+    private inner class RefreshBranchAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.refresh.branch.text"),
+        MyBundle.message("teamcity.toolwindow.refresh.branch.description"),
+        AllIcons.Actions.Refresh,
+    ) {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        /* Disabled while a fetch is in flight: the service has no re-entrancy guard. */
+        override fun update(e: AnActionEvent) {
+            val statusService = TeamCityBuildStatusService.getInstance(project)
+
+            e.presentation.isEnabled = statusService.fetchState != TeamCityFetchState.IN_PROGRESS
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val branchName = selectedBranchName() ?: return
+            TeamCityBuildStatusService.getInstance(project).requestBranchRefresh(branchName)
+        }
+    }
+
     private inner class StopSelectedBuildAction : AnAction(
         MyBundle.message("teamcity.toolwindow.stop.text"),
         MyBundle.message("teamcity.toolwindow.stop.description"),
@@ -665,14 +690,13 @@ private class RemoteRunToolWindowPanel(
     ) {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
+        /* Only unfinished builds can be stopped, so finished ones do not offer the action at all. */
         override fun update(e: AnActionEvent) {
-            e.presentation.isVisible = selectedFailedTest() == null
-
             val build = selectedBuild()
             val status = build?.let { rememberedBuild ->
                 TeamCityBuildStatusService.getInstance(project).status(rememberedBuild.buildId)
             }
-            e.presentation.isEnabled = build != null && isBuildUnfinished(build, status)
+            e.presentation.isVisible = build != null && isBuildUnfinished(build, status)
         }
 
         override fun actionPerformed(e: AnActionEvent) {
@@ -716,10 +740,6 @@ private class RemoteRunToolWindowPanel(
     ) {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
-        override fun update(e: AnActionEvent) {
-            e.presentation.isVisible = selectedFailedTest() != null
-        }
-
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestNode = selectedFailedTest() ?: return
             navigateToTest(failedTestNode.build, failedTestNode.test)
@@ -732,11 +752,6 @@ private class RemoteRunToolWindowPanel(
         null,
     ) {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
-        override fun update(e: AnActionEvent) {
-            e.presentation.isVisible = selectedFailedTest() == null
-            e.presentation.isEnabled = selectedBuild() != null
-        }
 
         override fun actionPerformed(e: AnActionEvent) {
             val build = selectedBuild() ?: return
@@ -752,8 +767,7 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
-            e.presentation.isVisible = selectedFailedTest() == null
-            e.presentation.isEnabled = selectedBuild()?.let(::isRememberedBuild) == true
+            e.presentation.isVisible = selectedBuild()?.let(::isRememberedBuild) == true
         }
 
         override fun actionPerformed(e: AnActionEvent) {

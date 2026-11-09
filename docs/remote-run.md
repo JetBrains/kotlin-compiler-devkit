@@ -15,12 +15,16 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
 - All local branches are listed: the current branch first, then branches by their latest run, then the rest by name.
   The search field filters them like the Git branches popup.
 - Besides the runs launched from the IDE, the newest aggregate TeamCity builds of the 10 most recently checked out
-  branches are shown; they are fetched on every refresh and kept in memory only.
+  branches are shown; they are fetched on every refresh and kept in memory only. Builds of other branches are
+  fetched on demand and then stay listed like the automatically fetched ones.
 - A branch with a known run shows the latest status instead of the branch icon (spinner, success or failure).
 - Build rows show test counts and, while scheduling or running, the elapsed time.
-- Expand a failed build to list its failed tests; double-click a test to open it in the editor. A failed test's
-  context menu only offers "Navigate to Test", which is shown only there.
-- Double-click a build to open it on TeamCity. Unfinished builds can be stopped from the context menu.
+- Expand a failed build to list its failed tests; double-click a test to open it in the editor. The failed-test
+  context menu only offers "Navigate to Test".
+- Double-click a build to open it on TeamCity. The build context menu offers stopping unfinished builds, opening
+  the build on TeamCity and removing remembered launches from the list.
+- The branch context menu offers launching the branch and "Refresh Branch", which fetches its aggregate builds on
+  demand; branches outside the recently checked out ones are fetched only that way.
 
 ## How it works
 
@@ -33,8 +37,8 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
 | `TeamCityCli.kt` | Command lines and output parsing for the `teamcity` CLI |
 | `GitCommandFacade.kt` | Picks the TeamCity remote, computes the branch push state, reads the recently checked out branches |
 | `RememberedTeamCityBuild.kt` | Persists launched builds per project |
-| `TeamCityBuildStatusService.kt` | Polls build statuses and failed tests |
-| `TeamCityBranchBuilds.kt` | Fetches the aggregate builds of the recently checked out branches and the build queue |
+| `TeamCityBuildStatusService.kt` | Polls build statuses and failed tests; fetches branch builds per round and on demand |
+| `TeamCityBranchBuilds.kt` | Fetches the aggregate builds of the requested branches and the build queue |
 | `TeamCityBuildStatus.kt`, `FailedTests.kt` | REST URLs, JSON parsing, status icons |
 
 ### Launching
@@ -58,6 +62,9 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
   aggregate build queue, since queued builds are not served by the builds endpoint. Fetched builds live in
   memory only and merge with the remembered launches (same build id ⇒ the remembered launch wins);
   "Remove from List" therefore applies to remembered launches only.
+- Branches outside the recent ones are fetched only through their context-menu action. Every round replaces the
+  builds of the branches it fetches and keeps the on-demand builds of the others, whose unfinished builds keep
+  being polled like remembered launches.
 - While a round is running, the refresh button itself turns into a spinner; the status line under
   the tree explains the outcome: fetching, no builds found for the branches, or a connection problem (e.g. no VPN).
 - `TeamCityBuildStatusService` polls TeamCity's guest REST API (`/guestAuth/app/rest/...`) through the IDE's
