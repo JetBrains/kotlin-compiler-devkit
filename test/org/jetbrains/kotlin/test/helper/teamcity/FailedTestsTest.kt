@@ -73,4 +73,60 @@ class FailedTestsTest {
         )
         assertEquals(FailedTestsResult(emptyList(), 0), parseFailedTests("not JSON"))
     }
+
+    @Test
+    fun groupsFailedTestsByQualifiedClassAndKeepsUnclassifiedTestsSeparate() {
+        val firstTest = failedTest(packageName = "org.first", className = "SampleTest", methodName = "first")
+        val sameClassMutedTest = failedTest(
+            packageName = "org.first",
+            className = "SampleTest",
+            methodName = "muted",
+            isMuted = true,
+        )
+        val sameSimpleNameInAnotherPackage = failedTest(
+            packageName = "org.second",
+            className = "SampleTest",
+            methodName = "otherPackage",
+        )
+        val nestedClassTest = failedTest(
+            packageName = "org.first",
+            className = "Outer" + '$' + "Inner",
+            methodName = "nested",
+        )
+        val unclassifiedTest = failedTest(packageName = null, className = null, methodName = null)
+
+        assertEquals(
+            listOf(
+                FailedTestClassGroup("org.first.SampleTest", listOf(firstTest, sameClassMutedTest)),
+                FailedTestClassGroup("org.second.SampleTest", listOf(sameSimpleNameInAnotherPackage)),
+                FailedTestClassGroup("org.first.Outer.Inner", listOf(nestedClassTest)),
+                FailedTestClassGroup(null, listOf(unclassifiedTest)),
+            ),
+            groupFailedTestsByClass(
+                listOf(
+                    firstTest,
+                    sameSimpleNameInAnotherPackage,
+                    nestedClassTest,
+                    sameClassMutedTest,
+                    unclassifiedTest
+                ),
+            ),
+        )
+        assertEquals(2, FailedTestsResult(listOf(firstTest, sameClassMutedTest), totalCount = 4).remainingCount)
+    }
+
+    private fun failedTest(
+        packageName: String?,
+        className: String?,
+        methodName: String?,
+        isMuted: Boolean = false,
+    ) = FailedTest(
+        name = methodName,
+        packageName = packageName,
+        className = className,
+        methodName = methodName,
+        displayName = methodName ?: "Unknown test",
+        isMuted = isMuted,
+        buildTypeName = null,
+    )
 }

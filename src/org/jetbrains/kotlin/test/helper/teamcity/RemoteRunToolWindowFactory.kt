@@ -121,6 +121,14 @@ private class FailedTestNode(
     override fun isLeaf(): Boolean = true
 }
 
+private class FailedTestClassNode(
+    val build: RememberedTeamCityBuild,
+    val classFqName: String,
+    val testCount: Int,
+) : DefaultMutableTreeNode(classFqName) {
+    override fun isLeaf(): Boolean = false
+}
+
 private class MoreFailedTestsNode(
     val build: RememberedTeamCityBuild,
     val count: Int,
@@ -313,6 +321,7 @@ private class RemoteRunToolWindowPanel(
             OpenBuildInTeamCityAction(),
             RemoveRememberedBuildAction(),
         )
+        val failedTestClassPopupMenu = createPopupMenu(NavigateToFailedTestClassAction())
         val failedTestPopupMenu = createPopupMenu(NavigateToFailedTestAction())
 
         tree.addMouseListener(object : PopupHandler() {
@@ -323,6 +332,7 @@ private class RemoteRunToolWindowPanel(
                 when (clickedPath.lastPathComponent) {
                     is BranchNode -> branchPopupMenu.show(component, x, y)
                     is BuildNode, is MoreFailedTestsNode -> buildPopupMenu.show(component, x, y)
+                    is FailedTestClassNode -> failedTestClassPopupMenu.show(component, x, y)
                     is FailedTestNode -> failedTestPopupMenu.show(component, x, y)
                 }
             }
@@ -335,6 +345,7 @@ private class RemoteRunToolWindowPanel(
                         navigateToTest(node.build, node.test)
                         true
                     }
+
                     else -> false
                 }
             }
@@ -486,6 +497,8 @@ private class RemoteRunToolWindowPanel(
 
         val selectedBuildId = selectedBuild()?.buildId
         val selectedBranchName = selectedBranchName()
+        val selectedFailedTest = selectedFailedTest()?.let { node -> node.build.buildId to node.test }
+        val selectedFailedTestClass = selectedFailedTestClass()?.let { node -> node.build.buildId to node.classFqName }
         val collapsedBranchNames = branchNodes()
             .filter { branchNode -> tree.isCollapsed(TreePath(branchNode.path)) }
             .map { branchNode -> branchNode.branchName }
@@ -495,14 +508,25 @@ private class RemoteRunToolWindowPanel(
                 .filter { buildNode -> tree.isExpanded(TreePath(buildNode.path)) }
                 .map { buildNode -> buildNode.build.buildId }
         }.toSet()
+        val expandedFailedTestClasses = branchNodes().flatMap { branchNode ->
+            branchNode.children().toList().filterIsInstance<BuildNode>().flatMap { buildNode ->
+                buildNode.children().toList().filterIsInstance<FailedTestClassNode>()
+                    .filter { classNode -> tree.isExpanded(TreePath(classNode.path)) }
+                    .map { classNode -> buildNode.build.buildId to classNode.classFqName }
+            }
+        }.toSet()
 
         treeModel.setRoot(createRootNode(content))
 
         for (branchNode in branchNodes()) {
             if (branchNode.branchName !in collapsedBranchNames) tree.expandPath(TreePath(branchNode.path))
             branchNode.children().toList().filterIsInstance<BuildNode>()
-                .filter { buildNode -> buildNode.build.buildId in expandedBuildIds }
-                .forEach { buildNode -> tree.expandPath(TreePath(buildNode.path)) }
+                .forEach { buildNode ->
+                    if (buildNode.build.buildId in expandedBuildIds) tree.expandPath(TreePath(buildNode.path))
+                    buildNode.children().toList().filterIsInstance<FailedTestClassNode>()
+                        .filter { classNode -> (buildNode.build.buildId to classNode.classFqName) in expandedFailedTestClasses }
+                        .forEach { classNode -> tree.expandPath(TreePath(classNode.path)) }
+                }
         }
 
         if (filterChanged) {
@@ -514,7 +538,7 @@ private class RemoteRunToolWindowPanel(
             }
         }
 
-        restoreSelection(selectedBuildId, selectedBranchName)
+        restoreSelection(selectedBuildId, selectedBranchName, selectedFailedTest, selectedFailedTestClass)
     }
 
     private fun branchNodes(): List<BranchNode> {
@@ -522,17 +546,37 @@ private class RemoteRunToolWindowPanel(
         return root.children().toList().filterIsInstance<BranchNode>()
     }
 
-    /**
-     * Reselects the previously selected build, else its branch; nothing when both are gone.
-     */
-    private fun restoreSelection(selectedBuildId: String?, selectedBranchName: String?) {
+    private fun restoreSelection(
+        selectedBuildId: String?,
+        selectedBranchName: String?,
+        selectedFailedTest: Pair<String, FailedTest>?,
+        selectedFailedTestClass: Pair<String, String>?,
+    ) {
         val branchNode = branchNodes().firstOrNull { node -> node.branchName == selectedBranchName } ?: return
         val buildNode = branchNode.children().toList()
             .filterIsInstance<BuildNode>()
             .firstOrNull { node -> node.build.buildId == selectedBuildId }
+        val selectedTestNode = selectedFailedTest
+            ?.takeIf { (buildId, _) -> buildNode?.build?.buildId == buildId }
+            ?.let { (_, test) -> buildNode?.let(::failedTestNodes)?.firstOrNull { node -> node.test == test } }
+        val selectedClassNode = selectedFailedTestClass
+            ?.takeIf { (buildId, _) -> buildNode?.build?.buildId == buildId }
+            ?.let { (_, classFqName) ->
+                buildNode?.children()?.toList()?.filterIsInstance<FailedTestClassNode>()
+                    ?.firstOrNull { node -> node.classFqName == classFqName }
+            }
 
-        tree.selectionPath = TreePath((buildNode ?: branchNode).path)
+        tree.selectionPath = TreePath((selectedTestNode ?: selectedClassNode ?: buildNode ?: branchNode).path)
     }
+
+    private fun failedTestNodes(buildNode: BuildNode): List<FailedTestNode> =
+        buildNode.children().toList().flatMap { node ->
+            when (node) {
+                is FailedTestClassNode -> node.children().toList().filterIsInstance<FailedTestNode>()
+                is FailedTestNode -> listOf(node)
+                else -> emptyList()
+            }
+        }
 
     private fun createRootNode(content: TreeContent): DefaultMutableTreeNode {
         val currentBranchName = content.currentBranchName
@@ -557,9 +601,31 @@ private class RemoteRunToolWindowPanel(
                 .forEach { rememberedBuild ->
                     val failedTests = content.failedTests[rememberedBuild.buildId]
                     val buildNode = BuildNode(rememberedBuild, failedTests)
-                    failedTests?.tests.orEmpty()
-                        .sortedBy { failedTest -> failedTest.isMuted }
-                        .forEach { failedTest -> buildNode.add(FailedTestNode(rememberedBuild, failedTest)) }
+                    groupFailedTestsByClass(failedTests?.tests.orEmpty()).forEach { testGroup ->
+                        val sortedTests = testGroup.tests.sortedBy { failedTest -> failedTest.isMuted }
+                        if (testGroup.classFqName == null) {
+                            sortedTests.forEach { failedTest ->
+                                buildNode.add(
+                                    FailedTestNode(
+                                        rememberedBuild,
+                                        failedTest
+                                    )
+                                )
+                            }
+                        } else {
+                            val classNode =
+                                FailedTestClassNode(rememberedBuild, testGroup.classFqName, sortedTests.size)
+                            sortedTests.forEach { failedTest ->
+                                classNode.add(
+                                    FailedTestNode(
+                                        rememberedBuild,
+                                        failedTest
+                                    )
+                                )
+                            }
+                            buildNode.add(classNode)
+                        }
+                    }
                     failedTests?.remainingCount
                         ?.takeIf { remainingCount -> remainingCount > 0 }
                         ?.let { remainingCount -> buildNode.add(MoreFailedTestsNode(rememberedBuild, remainingCount)) }
@@ -575,6 +641,7 @@ private class RemoteRunToolWindowPanel(
         return when (val node = tree.selectionPath?.lastPathComponent) {
             is BranchNode -> node.branchName
             is BuildNode -> node.build.branchName
+            is FailedTestClassNode -> node.build.branchName
             is FailedTestNode -> node.build.branchName
             is MoreFailedTestsNode -> node.build.branchName
             else -> null
@@ -583,6 +650,7 @@ private class RemoteRunToolWindowPanel(
 
     private fun selectedBuild(): RememberedTeamCityBuild? = when (val node = tree.selectionPath?.lastPathComponent) {
         is BuildNode -> node.build
+        is FailedTestClassNode -> node.build
         is FailedTestNode -> node.build
         is MoreFailedTestsNode -> node.build
         else -> null
@@ -596,6 +664,9 @@ private class RemoteRunToolWindowPanel(
 
     private fun selectedFailedTest(): FailedTestNode? =
         tree.selectionPath?.lastPathComponent as? FailedTestNode
+
+    private fun selectedFailedTestClass(): FailedTestClassNode? =
+        tree.selectionPath?.lastPathComponent as? FailedTestClassNode
 
     /* Toolbar action: always launches the aggregate run for the checked out branch. */
     private inner class LaunchTestRunAction : AnAction(
@@ -738,6 +809,19 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
+    private inner class NavigateToFailedTestClassAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.navigate.to.class"),
+        null,
+        AllIcons.Nodes.Class,
+    ) {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val failedTestClassNode = selectedFailedTestClass() ?: return
+            navigateToClass(failedTestClassNode.build, failedTestClassNode.classFqName)
+        }
+    }
+
     private inner class OpenBuildInTeamCityAction : AnAction(
         MyBundle.message("teamcity.toolwindow.open.text"),
         MyBundle.message("teamcity.toolwindow.open.description"),
@@ -772,6 +856,19 @@ private class RemoteRunToolWindowPanel(
         DumbService.getInstance(project).runWhenSmart {
             val target = ReadAction.compute<NavigatablePsiElement?, RuntimeException> {
                 findFailedTestTarget(project, test)
+            }
+            if (target == null) {
+                BrowserUtil.browse(build.webUrl)
+            } else {
+                target.navigate(true)
+            }
+        }
+    }
+
+    private fun navigateToClass(build: RememberedTeamCityBuild, classFqName: String) {
+        DumbService.getInstance(project).runWhenSmart {
+            val target = ReadAction.compute<NavigatablePsiElement?, RuntimeException> {
+                findFailedTestClass(project, classFqName)
             }
             if (target == null) {
                 BrowserUtil.browse(build.webUrl)
@@ -870,13 +967,20 @@ private class RemoteRunToolWindowPanel(
                         SimpleTextAttributes.ERROR_ATTRIBUTES
                     }
                     append(value.test.displayName, testAttributes)
-                    failedTestClassFqName(value.test)?.let { className ->
-                        append("  $className", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                    }
                     value.test.buildTypeName?.let { buildTypeName ->
                         append("  $buildTypeName", SimpleTextAttributes.GRAYED_ATTRIBUTES)
                     }
                     toolTipText = MyBundle.message("teamcity.toolwindow.failed.test.tooltip")
+                }
+
+                is FailedTestClassNode -> {
+                    icon = AllIcons.Nodes.Class
+                    append(value.classFqName)
+                    append(
+                        "  " + MyBundle.message("teamcity.build.tests.failed", value.testCount),
+                        SimpleTextAttributes.GRAYED_ATTRIBUTES,
+                    )
+                    toolTipText = MyBundle.message("teamcity.toolwindow.failed.test.class.tooltip")
                 }
 
                 is MoreFailedTestsNode -> {
