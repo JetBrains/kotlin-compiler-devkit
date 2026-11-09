@@ -5,6 +5,7 @@ import com.intellij.dvcs.repo.VcsRepositoryMappingListener
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -14,7 +15,6 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
@@ -34,10 +34,13 @@ import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.PopupHandler
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.speedSearch.SpeedSearchUtil
 import com.intellij.ui.treeStructure.Tree
+import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import com.intellij.xml.util.XmlStringUtil
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
@@ -48,7 +51,6 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.event.MouseEvent
 import javax.swing.Icon
-import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JPopupMenu
 import javax.swing.JTree
@@ -102,7 +104,7 @@ private class BranchNode(val branchName: String, val isCurrent: Boolean) : Defau
 }
 
 /**
- * One remembered build under its branch.
+ * One build under its branch: a remembered launch or a fetched aggregate build.
  */
 private class BuildNode(
     val build: RememberedTeamCityBuild,
@@ -213,7 +215,7 @@ internal fun orderRemoteRunBranchNames(
     val latestBuildTimestampByBranch = builds.groupBy { build -> build.branchName }
         .mapValues { (_, branchBuilds) -> branchBuilds.maxOf { build -> build.launchTimestamp } }
 
-    val previouslyLaunchedBranches = (latestBuildTimestampByBranch.keys + listOfNotNull(pendingLaunchBranchName))
+    val branchesWithBuilds = (latestBuildTimestampByBranch.keys + listOfNotNull(pendingLaunchBranchName))
         .filter { branchName -> branchName != currentBranchName }
         .distinct()
         .sortedWith(
@@ -233,14 +235,28 @@ internal fun orderRemoteRunBranchNames(
 
     return buildList {
         currentBranchName?.let(::add)
-        addAll(previouslyLaunchedBranches)
+        addAll(branchesWithBuilds)
         addAll(otherLocalBranches)
     }
 }
 
 /**
- * The Remote Run tool window body: all local branches and remembered TeamCity builds grouped by branch,
- * with the currently checked out branch pinned first and previously launched branches ordered by their last run.
+ * The builds the tree shows: the remembered launches plus the fetched branch builds.
+ * Remembered launches win for the same build id, since their launch time is the local one.
+ */
+internal fun mergeRememberedAndFetchedBuilds(
+    remembered: List<RememberedTeamCityBuild>,
+    fetched: List<RememberedTeamCityBuild>,
+): List<RememberedTeamCityBuild> {
+    val rememberedBuildIds = remembered.map { build -> build.buildId }.toSet()
+
+    return remembered + fetched.filterNot { build -> build.buildId in rememberedBuildIds }
+}
+
+/**
+ * The Remote Run tool window body: all local branches and their TeamCity builds grouped by branch —
+ * remembered launches plus the aggregate builds fetched for the branches — with the currently checked
+ * out branch pinned first and branches with runs ordered by their latest run.
  *
  * Build statuses come from [TeamCityBuildStatusService]'s cache, which polls only while this
  * tool window is visible; status changes merely repaint the tree, structure changes rebuild it.
@@ -254,6 +270,9 @@ private class RemoteRunToolWindowPanel(
     private val tree = Tree(treeModel)
     private val searchField = SearchTextField(false)
     private val elapsedTimeTimer = Timer(1_000) { tree.repaint() }
+    private val fetchStatusLabel = JBLabel()
+
+    private val actionToolbar: ActionToolbar
 
     /**
      * What the tree currently shows; null before the first build. EDT only.
@@ -261,7 +280,8 @@ private class RemoteRunToolWindowPanel(
     private var shownContent: TreeContent? = null
 
     init {
-        toolbar = createToolbar()
+        actionToolbar = createToolbar()
+        toolbar = actionToolbar.component
 
         searchField.textEditor.emptyText.text = MyBundle.message("teamcity.toolwindow.search.placeholder")
         searchField.addDocumentListener(object : DocumentAdapter() {
@@ -273,7 +293,12 @@ private class RemoteRunToolWindowPanel(
         val contentPanel = JPanel(BorderLayout())
         contentPanel.add(searchField, BorderLayout.NORTH)
         contentPanel.add(JBScrollPane(tree), BorderLayout.CENTER)
+        contentPanel.add(fetchStatusLabel, BorderLayout.SOUTH)
         setContent(contentPanel)
+
+        fetchStatusLabel.isVisible = false
+        fetchStatusLabel.border = JBUI.Borders.empty(2, 8)
+        updateFetchUi()
 
         tree.isRootVisible = false
         tree.cellRenderer = BuildsTreeCellRenderer()
@@ -327,6 +352,10 @@ private class RemoteRunToolWindowPanel(
             TeamCityLaunchProgressListener { scheduleTreeRebuild() },
         )
         messageBusConnection.subscribe(
+            TeamCityBuildStatusService.FETCH_STATE_TOPIC,
+            TeamCityFetchListener { scheduleFetchUiUpdate() },
+        )
+        messageBusConnection.subscribe(
             GitRepository.GIT_REPO_CHANGE,
             GitRepositoryChangeListener { scheduleTreeRebuild() },
         )
@@ -361,7 +390,7 @@ private class RemoteRunToolWindowPanel(
         if (isVisible) elapsedTimeTimer.start() else elapsedTimeTimer.stop()
     }
 
-    private fun createToolbar(): JComponent {
+    private fun createToolbar(): ActionToolbar {
         val actionGroup = DefaultActionGroup(
             LaunchTestRunAction(),
             RefreshStatusesAction(),
@@ -369,7 +398,49 @@ private class RemoteRunToolWindowPanel(
 
         val actionToolbar = ActionManager.getInstance().createActionToolbar("RemoteRunToolbar", actionGroup, true)
         actionToolbar.targetComponent = this
-        return actionToolbar.component
+        return actionToolbar
+    }
+
+    private fun scheduleFetchUiUpdate() {
+        ApplicationManager.getApplication().invokeLater({ updateFetchUi() }, project.disposed)
+    }
+
+    private fun updateFetchUi() {
+        val state = TeamCityBuildStatusService.getInstance(project).fetchState
+
+        updateFetchStatusLabel(state)
+        actionToolbar.updateActionsAsync()
+    }
+
+    /**
+     * The fetch indicator under the tree: a spinner while fetching, an explanation when TeamCity
+     * was unreachable or nothing was found, and nothing otherwise.
+     */
+    private fun updateFetchStatusLabel(state: TeamCityFetchState) {
+        when (state) {
+            TeamCityFetchState.IN_PROGRESS -> {
+                fetchStatusLabel.icon = AnimatedIcon.Default.INSTANCE
+                fetchStatusLabel.text = MyBundle.message("teamcity.toolwindow.fetch.in.progress")
+                fetchStatusLabel.foreground = UIUtil.getContextHelpForeground()
+                fetchStatusLabel.isVisible = true
+            }
+
+            TeamCityFetchState.NO_BUILDS_FOUND -> {
+                fetchStatusLabel.icon = null
+                fetchStatusLabel.text = MyBundle.message("teamcity.toolwindow.fetch.no.builds")
+                fetchStatusLabel.foreground = UIUtil.getContextHelpForeground()
+                fetchStatusLabel.isVisible = true
+            }
+
+            TeamCityFetchState.FAILED -> {
+                fetchStatusLabel.icon = null
+                fetchStatusLabel.text = MyBundle.message("teamcity.toolwindow.fetch.failed")
+                fetchStatusLabel.foreground = SimpleTextAttributes.ERROR_ATTRIBUTES.fgColor
+                fetchStatusLabel.isVisible = true
+            }
+
+            TeamCityFetchState.COMPLETED -> fetchStatusLabel.isVisible = false
+        }
     }
 
     private fun createPopupMenu(): JPopupMenu {
@@ -394,8 +465,11 @@ private class RemoteRunToolWindowPanel(
      */
     private fun rebuildTreeModel() {
         val repository = project.kotlinMonorepoRepository()
-        val builds = RememberedTeamCityBuildStore.getInstance(project).builds()
         val statusService = TeamCityBuildStatusService.getInstance(project)
+        val builds = mergeRememberedAndFetchedBuilds(
+            remembered = RememberedTeamCityBuildStore.getInstance(project).builds(),
+            fetched = statusService.fetchedBranchBuilds(),
+        )
         val content = TreeContent(
             currentBranchName = repository?.currentBranch?.name,
             localBranchNames = repository?.branches?.localBranches?.map { branch -> branch.name }.orEmpty(),
@@ -514,6 +588,12 @@ private class RemoteRunToolWindowPanel(
         else -> null
     }
 
+    /* Fetched builds are not remembered, so there is nothing to remove for them. */
+    private fun isRememberedBuild(build: RememberedTeamCityBuild): Boolean =
+        RememberedTeamCityBuildStore.getInstance(project).builds().any { rememberedBuild ->
+            rememberedBuild.buildId == build.buildId
+        }
+
     private fun selectedFailedTest(): FailedTestNode? =
         tree.selectionPath?.lastPathComponent as? FailedTestNode
 
@@ -608,6 +688,16 @@ private class RemoteRunToolWindowPanel(
     ) {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
+        /* While a fetch round is running, the button ignores clicks and its glyph becomes the spinner. The
+           spinner is set as the disabled icon because a disabled action button rasterizes its normal icon
+           once into a static image, which would not animate. */
+        override fun update(e: AnActionEvent) {
+            val isFetching = TeamCityBuildStatusService.getInstance(project).fetchState == TeamCityFetchState.IN_PROGRESS
+
+            e.presentation.isEnabled = !isFetching
+            e.presentation.disabledIcon = if (isFetching) AnimatedIcon.Default.INSTANCE else null
+        }
+
         override fun actionPerformed(e: AnActionEvent) {
             TeamCityBuildStatusService.getInstance(project).requestRefresh()
         }
@@ -655,7 +745,7 @@ private class RemoteRunToolWindowPanel(
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
-            e.presentation.isEnabled = selectedBuild() != null
+            e.presentation.isEnabled = selectedBuild()?.let(::isRememberedBuild) == true
         }
 
         override fun actionPerformed(e: AnActionEvent) {

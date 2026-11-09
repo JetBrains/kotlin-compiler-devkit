@@ -177,7 +177,7 @@ private fun parseJsonOrNull(output: String): JsonElement? =
         null
     }
 
-private fun isBuildId(text: String): Boolean =
+internal fun isBuildId(text: String): Boolean =
     text.isNotEmpty() && text.all(Char::isDigit)
 
 private fun JsonObject.stringOrNull(key: String): String? {

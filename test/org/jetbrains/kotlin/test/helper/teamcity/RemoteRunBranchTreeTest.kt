@@ -59,6 +59,27 @@ class RemoteRunBranchTreeTest {
         assertEquals(BranchRunIndicator.FAILURE, branchRunIndicator(build(), status(BuildState.FINISHED, null), false))
     }
 
+    @Test
+    fun mergePrefersRememberedBuildsOverFetchedDuplicates() {
+        val remembered = listOf(build())
+        val fetched = listOf(
+            build().copy(launchTimestamp = 99),
+            build().copy(buildId = "2", branchName = "feature", launchTimestamp = 5),
+        )
+
+        assertEquals(
+            listOf(build(), build().copy(buildId = "2", branchName = "feature", launchTimestamp = 5)),
+            mergeRememberedAndFetchedBuilds(remembered, fetched),
+        )
+    }
+
+    @Test
+    fun mergeWithoutRememberedBuildsShowsEveryFetchedBuild() {
+        val fetched = listOf(build(), build().copy(buildId = "2"))
+
+        assertEquals(fetched, mergeRememberedAndFetchedBuilds(remembered = emptyList(), fetched = fetched))
+    }
+
     private fun build() =
         RememberedTeamCityBuild(
             buildId = "1",

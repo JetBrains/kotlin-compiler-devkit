@@ -31,7 +31,7 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
             mapOf(firstBuildId to runningFirst),
             mergeStatuses(
                 previous = mapOf(firstBuildId to runningFirst, secondBuildId to runningStatus(secondBuildId)),
-                rememberedBuildIds = setOf(firstBuildId),
+                shownBuildIds = setOf(firstBuildId),
                 fetched = emptyMap(),
             ),
         )
@@ -41,7 +41,7 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
             mapOf(firstBuildId to runningFirst),
             mergeStatuses(
                 previous = mapOf(firstBuildId to runningFirst),
-                rememberedBuildIds = setOf(firstBuildId),
+                shownBuildIds = setOf(firstBuildId),
                 fetched = emptyMap(),
             ),
         )
@@ -52,7 +52,7 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
             mapOf(firstBuildId to finishedFirst),
             mergeStatuses(
                 previous = mapOf(firstBuildId to runningFirst),
-                rememberedBuildIds = setOf(firstBuildId),
+                shownBuildIds = setOf(firstBuildId),
                 fetched = mapOf(firstBuildId to finishedFirst),
             ),
         )
@@ -66,7 +66,7 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
             mapOf(firstBuildId to finishedFirst),
             mergeStatuses(
                 previous = mapOf(firstBuildId to finishedFirst),
-                rememberedBuildIds = setOf(firstBuildId),
+                shownBuildIds = setOf(firstBuildId),
                 fetched = mapOf(firstBuildId to runningStatus(firstBuildId)),
             ),
         )
@@ -76,7 +76,7 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
             emptyMap<String, TeamCityBuildStatus>(),
             mergeStatuses(
                 previous = emptyMap(),
-                rememberedBuildIds = emptySet(),
+                shownBuildIds = emptySet(),
                 fetched = mapOf(firstBuildId to runningStatus(firstBuildId)),
             ),
         )
@@ -380,6 +380,114 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
         service.setPollingActive(false)
     }
 
+    fun testRefreshFetchesBuildsForAssociatedBranches() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master", "feature") }
+
+        val fetchedBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111003000", launchTimestamp = 42).copy(branchName = "feature"),
+            status = runningStatus("1111003000"),
+        )
+        val fetches = Channel<Pair<List<String>, TeamCityFetchState>>(Channel.UNLIMITED)
+        service.fetchBranchBuilds = { branchNames ->
+            fetches.send(branchNames to service.fetchState)
+            FetchedBranchBuildsResult(listOf(fetchedBuild), isFailed = false)
+        }
+
+        service.requestRefresh()
+
+        val (branchNames, stateWhileFetching) = withTimeout(5.seconds) { fetches.receive() }
+        assertEquals(listOf("master", "feature"), branchNames)
+        assertEquals(TeamCityFetchState.IN_PROGRESS, stateWhileFetching)
+
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().isEmpty() || service.fetchState != TeamCityFetchState.COMPLETED) {
+                delay(10.milliseconds)
+            }
+        }
+        assertEquals(listOf(fetchedBuild.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111003000"), service.status("1111003000"))
+    }
+
+    fun testFailedBranchFetchKeepsBuildsAndSignalsFailure() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master") }
+
+        val fetchedBuild = FetchedTeamCityBuild(
+            build = rememberedBuild("1111003000", launchTimestamp = 42),
+            status = runningStatus("1111003000"),
+        )
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(listOf(fetchedBuild), isFailed = false) }
+
+        service.requestRefresh()
+        withTimeout(5.seconds) { while (service.fetchedBranchBuilds().isEmpty()) delay(10.milliseconds) }
+
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(emptyList(), isFailed = true) }
+        service.requestRefresh()
+        withTimeout(5.seconds) { while (service.fetchState != TeamCityFetchState.FAILED) delay(10.milliseconds) }
+
+        /* The last known fetched builds and statuses survive the failed round. */
+        assertEquals(listOf(fetchedBuild.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111003000"), service.status("1111003000"))
+    }
+
+    fun testFetchWithoutBuildsSignalsNoBuildsFoundUnlessSomethingIsRemembered() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        val store = RememberedTeamCityBuildStore.getInstance(project)
+        service.associatedBranchNames = { listOf("master") }
+        service.fetchStatuses = { emptyMap() }
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(emptyList(), isFailed = false) }
+
+        service.requestRefresh()
+        withTimeout(5.seconds) { while (service.fetchState != TeamCityFetchState.NO_BUILDS_FOUND) delay(10.milliseconds) }
+
+        store.add(firstBuild)
+        service.requestRefresh()
+        withTimeout(5.seconds) { while (service.fetchState != TeamCityFetchState.COMPLETED) delay(10.milliseconds) }
+    }
+
+    fun testFailedTestsAreFetchedForFetchedBranchBuilds() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master") }
+        val failedTests = FailedTestsResult(
+            tests = listOf(
+                FailedTest(
+                    name = "testFails",
+                    packageName = "org.example",
+                    className = "ExampleTest",
+                    methodName = "testFails",
+                    displayName = "testFails",
+                    isMuted = false,
+                    buildTypeName = "Aggregate (master)",
+                ),
+            ),
+            totalCount = 1,
+        )
+        val failedTestFetches = Channel<String>(Channel.UNLIMITED)
+        service.fetchBranchBuilds = {
+            FetchedBranchBuildsResult(
+                listOf(
+                    FetchedTeamCityBuild(
+                        build = rememberedBuild("1111003000", launchTimestamp = 42),
+                        status = runningStatus("1111003000").copy(
+                            testCounts = TestCounts(passed = 3, failed = 1, ignored = 0, muted = 0),
+                        ),
+                    ),
+                ),
+                isFailed = false,
+            )
+        }
+        service.fetchFailedTests = { buildId ->
+            failedTestFetches.send(buildId)
+            failedTests
+        }
+
+        service.requestRefresh()
+
+        assertEquals("1111003000", withTimeout(5.seconds) { failedTestFetches.receive() })
+        withTimeout(5.seconds) { while (service.failedTests("1111003000") != failedTests) delay(10.milliseconds) }
+    }
+
     /**
      * The light project is shared between tests, so statuses, polling and the store must not leak.
      */
@@ -392,6 +500,9 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
                 service.setPollingActive(false)
                 service.fetchStatuses = service::fetchAllStatusesOrEmpty
                 service.fetchFailedTests = service::fetchFailedTestsFromTeamCity
+                service.fetchBranchBuilds = service::fetchBranchBuildsFromTeamCity
+                service.associatedBranchNames = service::monorepoLocalBranchNames
+                service.clearFetchedBranchBuilds()
                 service.updateStatuses(emptyMap())
             }
         } finally {
