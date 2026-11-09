@@ -30,8 +30,9 @@ internal enum class TeamCityFetchState { IN_PROGRESS, COMPLETED, NO_BUILDS_FOUND
 /**
  * Caches the live status of every TeamCity build the tool window shows; the tool window reads only this cache.
  *
- * That covers the remembered builds launched from the IDE and the latest aggregate builds of the most
- * recently checked out branches, which are fetched in the same rounds and kept in memory only (never persisted).
+ * That covers the remembered builds launched from the IDE, the latest aggregate builds of the most
+ * recently checked out branches (fetched in the same rounds) and the aggregate builds fetched on
+ * demand per branch ([requestBranchRefresh]); the fetched builds live in memory only (never persisted).
  * Everything is fetched via guest REST while [setPollingActive] is on (the Remote Run tool window is
  * visible), plus once per [requestRefresh] (the refresh button, or right after launching a build).
  * Finished builds are final, so their statuses are fetched only until their finished status is known.
@@ -65,11 +66,18 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     private var failedTestFetchCounts: Map<String, FailedTestFetchCounts> = emptyMap()
 
     /**
-     * The latest aggregate builds fetched for the recently checked out branches; in memory only,
-     * replaced by every successful round.
+     * The aggregate builds fetched for branches; in memory only. A round replaces the builds of the
+     * branches it fetches, builds fetched through [requestBranchRefresh] survive later rounds.
      */
     @Volatile
     private var fetchedBuildsCache: List<FetchedTeamCityBuild> = emptyList()
+
+    /**
+     * The branches whose builds the rounds fetch automatically; the unfinished builds of every other
+     * fetched branch keep being polled, since nothing else updates them.
+     */
+    @Volatile
+    private var automaticallyFetchedBranchNames: Set<String> = emptySet()
 
     @Volatile
     private var fetchStateValue: TeamCityFetchState = TeamCityFetchState.COMPLETED
@@ -92,6 +100,12 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     /**
      * Replaced in tests to avoid network access.
      */
+    internal var fetchBuildStatus: suspend (RememberedTeamCityBuild) -> TeamCityBuildStatus? =
+        ::fetchBuildStatusFromTeamCity
+
+    /**
+     * Replaced in tests to avoid network access.
+     */
     internal var fetchBranchBuilds: suspend (List<String>) -> FetchedBranchBuildsResult = ::fetchBranchBuildsFromTeamCity
 
     /**
@@ -104,8 +118,8 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     fun failedTests(buildId: String): FailedTestsResult? = failedTestOccurrences[buildId]
 
     /**
-     * The aggregate builds fetched for the recently checked out branches, without their statuses
-     * (read those with [status]).
+     * The aggregate builds fetched for branches — by the rounds and the per-branch refresh —
+     * without their statuses (read those with [status]).
      */
     fun fetchedBranchBuilds(): List<RememberedTeamCityBuild> =
         fetchedBuildsCache.map { fetchedBuild -> fetchedBuild.build }
@@ -115,6 +129,7 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
      */
     internal fun clearFetchedBranchBuilds() {
         fetchedBuildsCache = emptyList()
+        automaticallyFetchedBranchNames = emptySet()
         updateStatuses(emptyMap())
     }
 
@@ -156,13 +171,26 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
         }
     }
 
+    /**
+     * Fetches the aggregate builds of [branchName] outside the regular rounds — the context-menu
+     * action for branches the rounds do not cover — and merges them into the fetched builds.
+     */
+    fun requestBranchRefresh(branchName: String) {
+        scope.launch {
+            refreshBranchOnce(branchName)
+        }
+    }
+
     private suspend fun refreshOnce() {
         setFetchState(TeamCityFetchState.IN_PROGRESS)
 
+        var branchNames: List<String> = emptyList()
         var branchBuildsResult: FetchedBranchBuildsResult? = null
         try {
             branchBuildsResult = try {
-                fetchBranchBuilds(associatedBranchNames())
+                branchNames = associatedBranchNames()
+                automaticallyFetchedBranchNames = branchNames.toSet()
+                fetchBranchBuilds(branchNames)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -182,8 +210,9 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
 
             /* A failed round keeps the previously fetched builds, like statuses keep the last known values. */
             if (branchBuildsResult?.isFailed == false) {
-                val fetchedBuildsChanged = fetchedBuildsCache != branchBuildsResult.builds
-                fetchedBuildsCache = branchBuildsResult.builds
+                val mergedBuilds = mergeFetchedBranchBuilds(fetchedBuildsCache, branchNames, branchBuildsResult.builds)
+                val fetchedBuildsChanged = fetchedBuildsCache != mergedBuilds
+                fetchedBuildsCache = mergedBuilds
 
                 /* Build metadata can change without a status change, e.g. when a branch was renamed locally. */
                 if (fetchedBuildsChanged) publishStatusesChanged()
@@ -202,10 +231,57 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     private fun fetchEndState(branchBuildsResult: FetchedBranchBuildsResult?): TeamCityFetchState {
         if (branchBuildsResult == null || branchBuildsResult.isFailed) return TeamCityFetchState.FAILED
 
-        val nothingToShow = branchBuildsResult.builds.isEmpty() &&
+        val nothingToShow = fetchedBuildsCache.isEmpty() &&
             RememberedTeamCityBuildStore.getInstance(project).builds().isEmpty()
         return if (nothingToShow) TeamCityFetchState.NO_BUILDS_FOUND else TeamCityFetchState.COMPLETED
     }
+
+    /**
+     * One on-demand fetch of a single branch, as started by [requestBranchRefresh]: the branch's builds
+     * and queued ones replace its previous builds, the builds of other branches survive. A failed
+     * fetch keeps the last known builds, like a failed round does.
+     */
+    private suspend fun refreshBranchOnce(branchName: String) {
+        setFetchState(TeamCityFetchState.IN_PROGRESS)
+
+        var branchBuildsResult: FetchedBranchBuildsResult? = null
+        try {
+            branchBuildsResult = try {
+                fetchBranchBuilds(listOf(branchName))
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                logger.debug("Unable to fetch the aggregate TeamCity builds of branch $branchName", exception)
+                null
+            }
+
+            if (branchBuildsResult?.isFailed == false) {
+                val mergedBuilds =
+                    mergeFetchedBranchBuilds(fetchedBuildsCache, listOf(branchName), branchBuildsResult.builds)
+                val fetchedBuildsChanged = fetchedBuildsCache != mergedBuilds
+                fetchedBuildsCache = mergedBuilds
+
+                /* The new builds must be part of the shown ones before their statuses can be merged in. */
+                updateStatuses(
+                    branchBuildsResult.builds.associate { fetchedBuild ->
+                        fetchedBuild.build.buildId to fetchedBuild.status
+                    },
+                )
+                refreshFailedTestOccurrences()
+
+                if (fetchedBuildsChanged) publishStatusesChanged()
+            }
+        } finally {
+            setFetchState(branchRefreshEndState(branchBuildsResult))
+        }
+    }
+
+    private fun branchRefreshEndState(branchBuildsResult: FetchedBranchBuildsResult?): TeamCityFetchState =
+        if (branchBuildsResult == null || branchBuildsResult.isFailed) {
+            TeamCityFetchState.FAILED
+        } else {
+            TeamCityFetchState.COMPLETED
+        }
 
     private fun setFetchState(state: TeamCityFetchState) {
         if (fetchStateValue == state) return
@@ -260,10 +336,19 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
 
     /**
      * The real fetch; internal so tests can restore it after replacing [fetchStatuses].
+     *
+     * Besides the remembered launches this covers the fetched builds of branches outside the regular
+     * rounds — nothing else updates those, while the rounds refresh the branches they fetch.
      */
     internal suspend fun fetchAllStatusesOrEmpty(): Map<String, TeamCityBuildStatus> {
-        val builds = RememberedTeamCityBuildStore.getInstance(project).builds()
+        val rememberedBuilds = RememberedTeamCityBuildStore.getInstance(project).builds()
+        val polledFetchedBuilds = fetchedBuildsCache
+            .filter { fetchedBuild -> fetchedBuild.build.branchName !in automaticallyFetchedBranchNames }
+            .map { fetchedBuild -> fetchedBuild.build }
+
+        val builds = (rememberedBuilds + polledFetchedBuilds)
             .filter { build -> statuses[build.buildId]?.state != BuildState.FINISHED }
+            .distinctBy { build -> build.buildId }
         if (builds.isEmpty()) return emptyMap()
 
         return builds.mapNotNull { build ->
@@ -271,7 +356,10 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
         }.toMap()
     }
 
-    internal suspend fun fetchBuildStatus(build: RememberedTeamCityBuild): TeamCityBuildStatus? {
+    /**
+     * The real fetch; internal so tests can restore it after replacing [fetchBuildStatus].
+     */
+    internal suspend fun fetchBuildStatusFromTeamCity(build: RememberedTeamCityBuild): TeamCityBuildStatus? {
         val body = try {
             fetchJson(buildStatusUrl(build.buildId))
         } catch (exception: CancellationException) {
@@ -452,4 +540,20 @@ internal fun mergeStatuses(
     }
 
     return shownPrevious + newerFetched
+}
+
+/**
+ * The fetched builds after a fetch covered [fetchedBranchNames]: the builds of those branches are
+ * replaced by [buildsOfFetchedBranches] — the fetch is the newest truth about them — while the builds
+ * of other branches, fetched on demand, survive.
+ */
+internal fun mergeFetchedBranchBuilds(
+    fetchedBuilds: List<FetchedTeamCityBuild>,
+    fetchedBranchNames: List<String>,
+    buildsOfFetchedBranches: List<FetchedTeamCityBuild>,
+): List<FetchedTeamCityBuild> {
+    val fetchedBranchNameSet = fetchedBranchNames.toSet()
+
+    return fetchedBuilds.filterNot { fetchedBuild -> fetchedBuild.build.branchName in fetchedBranchNameSet } +
+        buildsOfFetchedBranches
 }
