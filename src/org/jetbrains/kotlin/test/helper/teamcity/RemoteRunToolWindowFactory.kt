@@ -237,7 +237,7 @@ internal fun orderRemoteRunBranchNames(
         currentBranchName?.let(::add)
         addAll(branchesWithBuilds)
         addAll(otherLocalBranches)
-    }
+    }.filterNot { branchName -> branchName == MASTER_BRANCH_NAME }
 }
 
 /**
@@ -333,14 +333,6 @@ private class RemoteRunToolWindowPanel(
                 return when (val node = tree.selectionPath?.lastPathComponent) {
                     is FailedTestNode -> {
                         navigateToTest(node.build, node.test)
-                        true
-                    }
-                    is MoreFailedTestsNode -> {
-                        BrowserUtil.browse(node.build.webUrl)
-                        true
-                    }
-                    is BuildNode -> {
-                        BrowserUtil.browse(node.build.webUrl)
                         true
                     }
                     else -> false
