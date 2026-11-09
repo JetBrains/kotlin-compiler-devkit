@@ -4,11 +4,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.NavigatablePsiElement
 import com.intellij.psi.search.GlobalSearchScope
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.Serializable
+import org.jetbrains.kotlin.test.helper.SingleObjectAsListSerializer
+import org.jetbrains.kotlin.test.helper.decodeTeamCityJsonOrNull
 
 internal const val MAX_FAILED_TESTS = 200
 
@@ -35,22 +33,51 @@ internal fun failedTestsUrl(buildId: String): String =
         "?locator=build:(id:$buildId),status:FAILURE,count:$MAX_FAILED_TESTS" +
         "&fields=count,testOccurrence(name,muted,test(parsedTestName(testPackage,testClass,testMethodName,testNameWithParameters)),build(buildType(name)))"
 
+@Serializable
+internal data class FailedTestsResponse(
+    val count: Int? = null,
+    @Serializable(with = OccurrencesListSerializer::class)
+    val testOccurrence: List<TestOccurrenceJson>? = null,
+)
+
+private object OccurrencesListSerializer :
+    SingleObjectAsListSerializer<TestOccurrenceJson>(TestOccurrenceJson.serializer())
+
+@Serializable
+internal data class TestOccurrenceJson(
+    val name: String? = null,
+    val muted: Boolean? = null,
+    val test: TestJson? = null,
+    val build: OccurrenceBuildJson? = null,
+)
+
+@Serializable
+internal data class TestJson(val parsedTestName: ParsedTestNameJson? = null)
+
+@Serializable
+internal data class ParsedTestNameJson(
+    val testPackage: String? = null,
+    val testClass: String? = null,
+    val testMethodName: String? = null,
+    val testNameWithParameters: String? = null,
+)
+
+@Serializable
+internal data class OccurrenceBuildJson(val buildType: BuildTypeNameJson? = null)
+
+@Serializable
+internal data class BuildTypeNameJson(val name: String? = null)
+
 internal fun parseFailedTests(json: String): FailedTestsResult {
-    val root = try {
-        Json.parseToJsonElement(json) as? JsonObject ?: return FailedTestsResult(emptyList(), 0)
-    } catch (_: SerializationException) {
-        return FailedTestsResult(emptyList(), 0)
-    }
+    val response = decodeTeamCityJsonOrNull<FailedTestsResponse>(json)
+        ?: return FailedTestsResult(emptyList(), 0)
 
-    val occurrences = when (val value = root["testOccurrence"]) {
-        is JsonArray -> value.filterIsInstance<JsonObject>()
-        is JsonObject -> listOf(value)
-        else -> emptyList()
-    }
-    val tests = occurrences.take(MAX_FAILED_TESTS).map(::parseFailedTest)
-    val totalCount = root.intOrNull("count")?.coerceAtLeast(tests.size) ?: tests.size
+    val tests = response.testOccurrence
+        .orEmpty()
+        .take(MAX_FAILED_TESTS)
+        .map(::failedTest)
 
-    return FailedTestsResult(tests, totalCount)
+    return FailedTestsResult(tests, response.count?.coerceAtLeast(tests.size) ?: tests.size)
 }
 
 internal fun failedTestClassFqName(test: FailedTest): String? {
@@ -71,35 +98,20 @@ internal fun findFailedTestTarget(project: Project, test: FailedTest): Navigatab
     return psiClass.findMethodsByName(methodName, true).firstOrNull() ?: psiClass
 }
 
-private fun parseFailedTest(occurrence: JsonObject): FailedTest {
-    val test = occurrence["test"] as? JsonObject
-    val parsedName = test?.get("parsedTestName") as? JsonObject
-    val name = occurrence.stringOrNull("name")
-    val packageName = parsedName?.stringOrNull("testPackage")
-    val className = parsedName?.stringOrNull("testClass")
-    val methodName = parsedName?.stringOrNull("testMethodName")
-    val parameterizedName = parsedName?.stringOrNull("testNameWithParameters")
-    val buildType = (occurrence["build"] as? JsonObject)
-        ?.get("buildType") as? JsonObject
+private fun failedTest(occurrence: TestOccurrenceJson): FailedTest {
+    val parsedName = occurrence.test?.parsedTestName
 
     return FailedTest(
-        name = name,
-        packageName = packageName,
-        className = className,
-        methodName = methodName,
-        displayName = parameterizedName ?: name ?: methodName ?: className ?: "Unknown test",
-        isMuted = occurrence.booleanOrFalse("muted"),
-        buildTypeName = buildType?.stringOrNull("name"),
+        name = occurrence.name,
+        packageName = parsedName?.testPackage,
+        className = parsedName?.testClass,
+        methodName = parsedName?.testMethodName,
+        displayName = parsedName?.testNameWithParameters
+            ?: occurrence.name
+            ?: parsedName?.testMethodName
+            ?: parsedName?.testClass
+            ?: "Unknown test",
+        isMuted = occurrence.muted ?: false,
+        buildTypeName = occurrence.build?.buildType?.name,
     )
 }
-
-private fun JsonObject.stringOrNull(key: String): String? {
-    val value = get(key) as? JsonPrimitive ?: return null
-    return if (value.isString) value.content else null
-}
-
-private fun JsonObject.intOrNull(key: String): Int? =
-    (get(key) as? JsonPrimitive)?.content?.toIntOrNull()
-
-private fun JsonObject.booleanOrFalse(key: String): Boolean =
-    (get(key) as? JsonPrimitive)?.content == "true"

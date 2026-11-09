@@ -3,13 +3,10 @@ package org.jetbrains.kotlin.test.helper.teamcity
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.util.text.VersionComparatorUtil
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.kotlin.test.helper.MyBundle
+import org.jetbrains.kotlin.test.helper.decodeTeamCityJsonOrNull
 import java.io.File
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -73,6 +70,9 @@ internal fun versionCommandLine(cliPath: String, workingDirectory: File?): Gener
     teamCityCommandLine(cliPath, workingDirectory)
         .withParameters("--version")
 
+@Serializable
+internal data class AuthStatusEntry(val server: String? = null, val status: String? = null)
+
 /**
  * Whether the CLI is already authenticated for our server.
  *
@@ -80,20 +80,19 @@ internal fun versionCommandLine(cliPath: String, workingDirectory: File?): Gener
  * e.g. [{"server": "https://buildserver.labs.intellij.net", ..., "status": "authenticated"}].
  * Anything unreadable counts as not authenticated, so callers fall back to an explicit login.
  */
-internal fun parseAuthStatus(output: String): Boolean {
-    val root = parseJsonOrNull(output)
-
-    return root is JsonArray && root.any { entry ->
-        if (entry !is JsonObject) return@any false
-
-        val server = entry.stringOrNull("server") ?: return@any false
-        val status = entry.stringOrNull("status") ?: return@any false
-
-        server.trimEnd('/') == TEAMCITY_SERVER_URL && status == "authenticated"
-    }
-}
+internal fun parseAuthStatus(output: String): Boolean =
+    decodeTeamCityJsonOrNull<List<AuthStatusEntry>>(stripAnsiEscapes(output))
+        ?.any { entry -> entry.server?.trimEnd('/') == TEAMCITY_SERVER_URL && entry.status == "authenticated" }
+        ?: false
 
 internal data class LaunchedBuild(val buildId: String, val webUrl: String)
+
+/**
+ * The build printed by `run start --json`; the id is a primitive because the CLI reports it
+ * either as a number or as a string.
+ */
+@Serializable
+internal data class LaunchedBuildJson(val id: JsonPrimitive? = null, val webUrl: String? = null)
 
 /**
  * The build started by `run start --json`, which prints the queued build as one JSON object
@@ -101,26 +100,32 @@ internal data class LaunchedBuild(val buildId: String, val webUrl: String)
  * Falls back to the first build link in plain text output; null when no build can be identified.
  */
 internal fun parseLaunchedBuild(stdout: String): LaunchedBuild? {
-    val buildJson = parseJsonOrNull(stdout) as? JsonObject
-    val buildId = (buildJson?.get("id") as? JsonPrimitive)?.content?.takeIf(::isBuildId)
+    val plainOutput = stripAnsiEscapes(stdout)
+    val buildJson = decodeTeamCityJsonOrNull<LaunchedBuildJson>(plainOutput)
+    val buildId = buildJson?.id?.content?.takeIf(::isBuildId)
+        ?: return launchedBuildFromPlainText(plainOutput)
 
-    if (buildId != null) {
-        val webUrl = buildJson.stringOrNull("webUrl") ?: "$TEAMCITY_SERVER_URL/build/$buildId"
-        return LaunchedBuild(buildId, webUrl)
-    }
+    return LaunchedBuild(buildId, buildJson.webUrl ?: "$TEAMCITY_SERVER_URL/build/$buildId")
+}
 
-    return buildUrlPattern.findAll(stripAnsiEscapes(stdout))
+private fun launchedBuildFromPlainText(output: String): LaunchedBuild? =
+    buildUrlPattern.findAll(output)
         .map { match -> match.value.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}') }
         .firstNotNullOfOrNull { url -> buildIdFromBuildUrl(url)?.let { buildId -> LaunchedBuild(buildId, url) } }
-}
+
+@Serializable
+internal data class CliErrorEnvelope(val error: CliErrorJson? = null)
+
+@Serializable
+internal data class CliErrorJson(val message: String? = null, val suggestion: String? = null)
 
 /**
  * The message of the `{"error": {"message": ..., "suggestion": ...}}` envelope the CLI prints to stderr with `--json`.
  */
 internal fun parseCliErrorMessage(stderr: String): String? {
-    val error = (parseJsonOrNull(stderr) as? JsonObject)?.get("error") as? JsonObject ?: return null
-    val message = error.stringOrNull("message")?.takeIf(String::isNotBlank) ?: return null
-    val suggestion = error.stringOrNull("suggestion")?.takeIf(String::isNotBlank)
+    val error = decodeTeamCityJsonOrNull<CliErrorEnvelope>(stripAnsiEscapes(stderr))?.error ?: return null
+    val message = error.message?.takeIf(String::isNotBlank) ?: return null
+    val suggestion = error.suggestion?.takeIf(String::isNotBlank)
 
     return if (suggestion == null) message else "$message\n$suggestion"
 }
@@ -170,17 +175,5 @@ private fun teamCityCommandLine(cliPath: String, workingDirectory: File?): Gener
 private fun stripAnsiEscapes(output: String): String =
     ansiEscapePattern.replace(output, "")
 
-private fun parseJsonOrNull(output: String): JsonElement? =
-    try {
-        Json.parseToJsonElement(stripAnsiEscapes(output))
-    } catch (_: SerializationException) {
-        null
-    }
-
 private fun isBuildId(text: String): Boolean =
     text.isNotEmpty() && text.all(Char::isDigit)
-
-private fun JsonObject.stringOrNull(key: String): String? {
-    val value = get(key) as? JsonPrimitive ?: return null
-    return if (value.isString) value.content else null
-}

@@ -49,6 +49,29 @@ class DomainBuildStatusTest {
     }
 
     @Test
+    fun parsesSingleBuildObjectAsList() {
+        val statuses = parseDomainBuildStatuses(
+            """
+            {"buildType": [
+              {"id": "Kotlin_KotlinDev_Domain_AnalysisApi",
+               "builds": {"build": {"status": "SUCCESS", "webUrl": "https://buildserver.labs.intellij.net/build/1"}}}
+            ]}
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            mapOf(
+                Domain.of("AnalysisApi") to DomainBuildStatus(
+                    isSuccess = true,
+                    statusText = null,
+                    webUrl = "https://buildserver.labs.intellij.net/build/1",
+                ),
+            ),
+            statuses,
+        )
+    }
+
+    @Test
     fun distinguishesMalformedJsonFromValidEmptyResponse() {
         assertNull(parseDomainBuildStatuses("<html>Login required</html>"))
         assertNull(parseDomainBuildStatuses("{\"buildType\": ["))

@@ -4,10 +4,8 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.nls.NlsMessages
 import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.AnimatedIcon
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.Serializable
+import org.jetbrains.kotlin.test.helper.decodeTeamCityJsonOrNull
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -120,6 +118,29 @@ internal fun buildStatusIcon(status: TeamCityBuildStatus?): Icon = when {
     else -> buildUnknownIcon
 }
 
+@Serializable
+internal data class BuildStatusJson(
+    val state: String? = null,
+    val status: String? = null,
+    val statusText: String? = null,
+    val webUrl: String? = null,
+    val branchName: String? = null,
+    val startDate: String? = null,
+    val buildType: BuildTypeJson? = null,
+    val testOccurrences: TestOccurrencesJson? = null,
+)
+
+@Serializable
+internal data class BuildTypeJson(val id: String? = null, val name: String? = null)
+
+@Serializable
+internal data class TestOccurrencesJson(
+    val passed: Int? = null,
+    val failed: Int? = null,
+    val ignored: Int? = null,
+    val muted: Int? = null,
+)
+
 /**
  * Parses a single-build REST response.
  *
@@ -127,57 +148,40 @@ internal fun buildStatusIcon(status: TeamCityBuildStatus?): Icon = when {
  * Returns null if [json] is not readable, so callers can keep the last known status.
  */
 internal fun parseBuildStatus(json: String, fallbackUrl: String): TeamCityBuildStatus? {
-    val root = try {
-        Json.parseToJsonElement(json)
-    } catch (_: SerializationException) {
-        return null
-    }
+    val build = decodeTeamCityJsonOrNull<BuildStatusJson>(json) ?: return null
 
-    if (root !is JsonObject) return null
-
-    val state = when (root.stringOrNull("state")) {
+    val state = when (build.state) {
         "queued" -> BuildState.QUEUED
         "running" -> BuildState.RUNNING
         "finished" -> BuildState.FINISHED
         else -> return null
     }
 
-    val isSuccessful = when (root.stringOrNull("status")) {
+    val isSuccessful = when (build.status) {
         "SUCCESS" -> true
         "FAILURE" -> false
         else -> null
     }
 
-    val buildType = root["buildType"] as? JsonObject
-    val testOccurrences = root["testOccurrences"] as? JsonObject
-
     return TeamCityBuildStatus(
         state = state,
         isSuccessful = isSuccessful,
-        statusText = root.stringOrNull("statusText"),
-        webUrl = root.stringOrNull("webUrl") ?: fallbackUrl,
-        branchName = root.stringOrNull("branchName"),
-        buildTypeId = buildType?.stringOrNull("id"),
-        buildTypeName = buildType?.stringOrNull("name"),
-        testCounts = testOccurrences?.let { occurrences ->
+        statusText = build.statusText,
+        webUrl = build.webUrl ?: fallbackUrl,
+        branchName = build.branchName,
+        buildTypeId = build.buildType?.id,
+        buildTypeName = build.buildType?.name,
+        testCounts = build.testOccurrences?.let { occurrences ->
             TestCounts(
-                passed = occurrences.intOrZero("passed"),
-                failed = occurrences.intOrZero("failed"),
-                ignored = occurrences.intOrZero("ignored"),
-                muted = occurrences.intOrZero("muted"),
+                passed = occurrences.passed ?: 0,
+                failed = occurrences.failed ?: 0,
+                ignored = occurrences.ignored ?: 0,
+                muted = occurrences.muted ?: 0,
             )
         },
-        startTimestamp = root.stringOrNull("startDate")?.let(::parseTeamCityDate),
+        startTimestamp = build.startDate?.let(::parseTeamCityDate),
     )
 }
-
-private fun JsonObject.stringOrNull(key: String): String? {
-    val value = get(key) as? JsonPrimitive ?: return null
-    return if (value.isString) value.content else null
-}
-
-private fun JsonObject.intOrZero(key: String): Int =
-    (get(key) as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
 
 private val teamCityDateFormatter = DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmssZ", Locale.ROOT)
 

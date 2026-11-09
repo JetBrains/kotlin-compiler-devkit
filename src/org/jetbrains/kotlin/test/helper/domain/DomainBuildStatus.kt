@@ -1,12 +1,9 @@
 package org.jetbrains.kotlin.test.helper.domain
 
 import com.intellij.openapi.util.IconLoader
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.Serializable
+import org.jetbrains.kotlin.test.helper.SingleObjectAsListSerializer
+import org.jetbrains.kotlin.test.helper.decodeTeamCityJsonOrNull
 import javax.swing.Icon
 
 /**
@@ -37,48 +34,56 @@ internal fun domainBuildStatusIcon(status: DomainBuildStatus?): Icon = when {
     else -> domainBuildFailureIcon
 }
 
+@Serializable
+internal data class DomainBuildTypesResponse(val buildType: List<DomainBuildTypeJson>? = null)
+
+@Serializable
+internal data class DomainBuildTypeJson(
+    val id: String? = null,
+    val builds: DomainBuildsJson? = null,
+)
+
+@Serializable
+internal data class DomainBuildsJson(
+    @Serializable(with = DomainBuildListSerializer::class)
+    val build: List<DomainBuildJson>? = null,
+)
+
+private object DomainBuildListSerializer :
+    SingleObjectAsListSerializer<DomainBuildJson>(DomainBuildJson.serializer())
+
+@Serializable
+internal data class DomainBuildJson(
+    val status: String? = null,
+    val statusText: String? = null,
+    val webUrl: String? = null,
+)
+
 /**
  * Keys are domains named by the build type id without [DOMAIN_BUILD_TYPE_ID_PREFIX].
  * Returns null if [json] is not a readable response, so callers can tell it apart from a valid response without builds.
  */
 internal fun parseDomainBuildStatuses(json: String): Map<Domain, DomainBuildStatus>? {
-    val root = try {
-        Json.parseToJsonElement(json)
-    } catch (_: SerializationException) {
-        return null
-    }
+    val response = decodeTeamCityJsonOrNull<DomainBuildTypesResponse>(json) ?: return null
 
-    if (root !is JsonObject) return null
-
-    val buildTypes = root["buildType"] ?: return emptyMap()
-    if (buildTypes !is JsonArray) return null
-
-    return buildTypes
-        .mapNotNull { buildType -> parseDomainBuildType(buildType) }
+    return response.buildType
+        .orEmpty()
+        .mapNotNull(::domainBuildStatusEntry)
         .toMap()
 }
 
-private fun parseDomainBuildType(buildType: JsonElement): Pair<Domain, DomainBuildStatus>? {
-    if (buildType !is JsonObject) return null
-
-    val buildTypeId = buildType.stringOrNull("id") ?: return null
+private fun domainBuildStatusEntry(buildType: DomainBuildTypeJson): Pair<Domain, DomainBuildStatus>? {
+    val buildTypeId = buildType.id ?: return null
     val domainName = buildTypeId.removePrefix(DOMAIN_BUILD_TYPE_ID_PREFIX)
     if (domainName == buildTypeId || domainName.isEmpty()) return null
 
-    val builds = (buildType["builds"] as? JsonObject)?.get("build") as? JsonArray ?: return null
-    val latestBuild = builds.firstOrNull() as? JsonObject ?: return null
-
-    val status = latestBuild.stringOrNull("status") ?: return null
-    val webUrl = latestBuild.stringOrNull("webUrl") ?: return null
+    val latestBuild = buildType.builds?.build?.firstOrNull() ?: return null
+    val status = latestBuild.status ?: return null
+    val webUrl = latestBuild.webUrl ?: return null
 
     return Domain.of(domainName) to DomainBuildStatus(
         isSuccess = status == "SUCCESS",
-        statusText = latestBuild.stringOrNull("statusText"),
+        statusText = latestBuild.statusText,
         webUrl = webUrl,
     )
-}
-
-private fun JsonObject.stringOrNull(key: String): String? {
-    val value = get(key) as? JsonPrimitive ?: return null
-    return if (value.isString) value.content else null
 }

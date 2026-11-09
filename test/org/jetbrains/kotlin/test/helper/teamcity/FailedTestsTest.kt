@@ -73,4 +73,24 @@ class FailedTestsTest {
         )
         assertEquals(FailedTestsResult(emptyList(), 0), parseFailedTests("not JSON"))
     }
+
+    @Test
+    fun parsesSingleOccurrenceObjectAsList() {
+        val result = parseFailedTests(
+            """
+            {
+              "count": 1,
+              "testOccurrence": {
+                "name": "testFails",
+                "test": {"parsedTestName": {"testPackage": "org.example", "testClass": "ExampleTest"}}
+              }
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(1, result.totalCount)
+        val test = result.tests.single()
+        assertEquals("testFails", test.displayName)
+        assertEquals("org.example.ExampleTest", failedTestClassFqName(test))
+    }
 }
