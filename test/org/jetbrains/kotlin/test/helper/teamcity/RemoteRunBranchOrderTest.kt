@@ -71,6 +71,18 @@ class RemoteRunBranchOrderTest {
         assertEquals(listOf("b", "outside-local", "a"), orderedBranches)
     }
 
+    @Test
+    fun neverShowsMasterEvenWhenItIsCheckedOut() {
+        val orderedBranches = orderRemoteRunBranchNames(
+            currentBranchName = MASTER_BRANCH_NAME,
+            localBranchNames = listOf(MASTER_BRANCH_NAME, "feature"),
+            builds = listOf(rememberedBuild(MASTER_BRANCH_NAME, 10)),
+            pendingLaunchBranchName = MASTER_BRANCH_NAME,
+        )
+
+        assertEquals(listOf("feature"), orderedBranches)
+    }
+
     private fun rememberedBuild(branchName: String, launchTimestamp: Long) =
         RememberedTeamCityBuild(
             buildId = "$branchName-$launchTimestamp",
