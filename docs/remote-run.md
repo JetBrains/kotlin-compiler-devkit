@@ -14,6 +14,8 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
 - **Launch Test Run** (toolbar) always runs the checked out branch. Right-click a branch to run another one.
 - All local branches are listed: the current branch first, then branches by their latest run, then the rest by name.
   The search field filters them like the Git branches popup.
+- Besides the runs launched from the IDE, the newest aggregate TeamCity builds of every local branch are shown;
+  they are fetched on every refresh and kept in memory only.
 - A branch with a known run shows the latest status instead of the branch icon (spinner, success or failure).
 - Build rows show test counts and, while scheduling or running, the elapsed time.
 - Expand a failed build to list its failed tests; double-click a test to open it in the editor.
@@ -31,6 +33,7 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
 | `GitCommandFacade.kt` | Picks the TeamCity remote and computes the branch push state |
 | `RememberedTeamCityBuild.kt` | Persists launched builds per project |
 | `TeamCityBuildStatusService.kt` | Polls build statuses and failed tests |
+| `TeamCityBranchBuilds.kt` | Fetches the aggregate builds of the local branches and the build queue |
 | `TeamCityBuildStatus.kt`, `FailedTests.kt` | REST URLs, JSON parsing, status icons |
 
 ### Launching
@@ -47,6 +50,14 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
 ### Following a build
 
 - Launched builds (the 50 newest) are stored in the workspace file (`KotlinDevKitTeamCityBuilds`).
+- Every refresh round also fetches the newest 5 aggregate builds of each local branch via guest REST
+  (`buildType:Kotlin_KotlinDev_Aggregate`, `branch:<name>`; `master` queries the default branch; running and
+  canceled chains are included) plus the
+  aggregate build queue, since queued builds are not served by the builds endpoint. Fetched builds live in
+  memory only and merge with the remembered launches (same build id ⇒ the remembered launch wins);
+  "Remove from List" therefore applies to remembered launches only.
+- While a round is running, the refresh button itself turns into a spinner; the status line under
+  the tree explains the outcome: fetching, no builds found for the branches, or a connection problem (e.g. no VPN).
 - `TeamCityBuildStatusService` polls TeamCity's guest REST API (`/guestAuth/app/rest/...`) through the IDE's
   `HttpRequests`, so no login is needed for reading. It polls every minute while the tool window is open, and every
   15 seconds while a build is still scheduling.

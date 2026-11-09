@@ -135,6 +135,16 @@ internal fun parseBuildStatus(json: String, fallbackUrl: String): TeamCityBuildS
 
     if (root !is JsonObject) return null
 
+    return buildStatusFromJson(root, fallbackUrl)
+}
+
+/**
+ * Reads the status fields shared by the single-build response and the fetched build lists.
+ *
+ * Missing optional fields (status, statusText, branchName, buildType) are tolerated — queued builds have none of them.
+ * Returns null when the build `state` is unknown, so callers skip such elements.
+ */
+internal fun buildStatusFromJson(root: JsonObject, fallbackUrl: String): TeamCityBuildStatus? {
     val state = when (root.stringOrNull("state")) {
         "queued" -> BuildState.QUEUED
         "running" -> BuildState.RUNNING
@@ -181,7 +191,7 @@ private fun JsonObject.intOrZero(key: String): Int =
 
 private val teamCityDateFormatter = DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmssZ", Locale.ROOT)
 
-private fun parseTeamCityDate(value: String): Long? = try {
+internal fun parseTeamCityDate(value: String): Long? = try {
     OffsetDateTime.parse(value, teamCityDateFormatter).toInstant().toEpochMilli()
 } catch (_: DateTimeParseException) {
     null

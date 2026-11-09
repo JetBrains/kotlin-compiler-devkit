@@ -10,17 +10,30 @@ import kotlinx.coroutines.*
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
 
 internal fun interface BuildStatusesListener {
     fun buildStatusesChanged()
 }
 
+internal fun interface TeamCityFetchListener {
+    fun fetchStateChanged()
+}
+
 /**
- * Caches the live status of every remembered TeamCity build; the tool window reads only this cache.
+ * The progress of the branch-builds fetch: in flight, finished, finished without anything to show,
+ * or failed to reach TeamCity at all.
+ */
+internal enum class TeamCityFetchState { IN_PROGRESS, COMPLETED, NO_BUILDS_FOUND, FAILED }
+
+/**
+ * Caches the live status of every TeamCity build the tool window shows; the tool window reads only this cache.
  *
- * Builds are polled via guest REST while [setPollingActive] is on (the Remote Run tool window is visible),
- * plus once per [requestRefresh] (e.g. right after launching a build).
- * Finished builds are final, so they are fetched only until their finished status is known.
+ * That covers the remembered builds launched from the IDE and the latest aggregate builds of the local
+ * branches, which are fetched in the same rounds and kept in memory only (never persisted).
+ * Everything is fetched via guest REST while [setPollingActive] is on (the Remote Run tool window is
+ * visible), plus once per [requestRefresh] (the refresh button, or right after launching a build).
+ * Finished builds are final, so their statuses are fetched only until their finished status is known.
  * Guest REST needs no authentication, just network access to the server.
  */
 @Service(Service.Level.PROJECT)
@@ -36,6 +49,9 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
         val STATUSES_CHANGED_TOPIC: Topic<BuildStatusesListener> =
             Topic("TeamCity build statuses changed", BuildStatusesListener::class.java)
 
+        val FETCH_STATE_TOPIC: Topic<TeamCityFetchListener> =
+            Topic("TeamCity fetch state changed", TeamCityFetchListener::class.java)
+
         fun getInstance(project: Project): TeamCityBuildStatusService = project.service()
     }
 
@@ -46,6 +62,15 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     private var failedTestOccurrences: Map<String, FailedTestsResult> = emptyMap()
 
     private var failedTestFetchCounts: Map<String, FailedTestFetchCounts> = emptyMap()
+
+    /**
+     * The latest aggregate builds fetched for the local branches; in memory only, replaced by every successful round.
+     */
+    @Volatile
+    private var fetchedBuildsCache: List<FetchedTeamCityBuild> = emptyList()
+
+    @Volatile
+    private var fetchStateValue: TeamCityFetchState = TeamCityFetchState.COMPLETED
 
     /**
      * Guarded by `this`, like every write to [statuses]; null while polling is inactive.
@@ -62,9 +87,36 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
      */
     internal var fetchFailedTests: suspend (String) -> FailedTestsResult? = ::fetchFailedTestsFromTeamCity
 
+    /**
+     * Replaced in tests to avoid network access.
+     */
+    internal var fetchBranchBuilds: suspend (List<String>) -> FetchedBranchBuildsResult = ::fetchBranchBuildsFromTeamCity
+
+    /**
+     * Replaced in tests to avoid depending on a git repository.
+     */
+    internal var associatedBranchNames: () -> List<String> = ::monorepoLocalBranchNames
+
     fun status(buildId: String): TeamCityBuildStatus? = statuses[buildId]
 
     fun failedTests(buildId: String): FailedTestsResult? = failedTestOccurrences[buildId]
+
+    /**
+     * The aggregate builds fetched for the local branches, without their statuses (read those with [status]).
+     */
+    fun fetchedBranchBuilds(): List<RememberedTeamCityBuild> =
+        fetchedBuildsCache.map { fetchedBuild -> fetchedBuild.build }
+
+    /**
+     * Drops the fetched branch builds and their statuses, so tests of the shared project start from scratch.
+     */
+    internal fun clearFetchedBranchBuilds() {
+        fetchedBuildsCache = emptyList()
+        updateStatuses(emptyMap())
+    }
+
+    val fetchState: TeamCityFetchState
+        get() = fetchStateValue
 
     internal val isPolling: Boolean
         get() = synchronized(this) { pollingJob?.isActive == true }
@@ -102,21 +154,63 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     }
 
     private suspend fun refreshOnce() {
-        val fetched = fetchStatuses()
-        val store = RememberedTeamCityBuildStore.getInstance(project)
-        val scheduledBuilds = resolveScheduledBuilds(store.builds(), fetched)
+        setFetchState(TeamCityFetchState.IN_PROGRESS)
 
-        if (scheduledBuilds.isEmpty()) {
-            updateStatuses(fetched)
+        var branchBuildsResult: FetchedBranchBuildsResult? = null
+        try {
+            branchBuildsResult = try {
+                fetchBranchBuilds(associatedBranchNames())
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                logger.debug("Unable to fetch the aggregate TeamCity builds of the local branches", exception)
+                null
+            }
+
+            val fetched = fetchStatuses()
+            val store = RememberedTeamCityBuildStore.getInstance(project)
+            val scheduledBuilds = resolveScheduledBuilds(store.builds(), fetched)
+
+            if (scheduledBuilds.isNotEmpty()) {
+                scheduledBuilds.forEach { (triggerBuildId, aggregateBuild) ->
+                    store.replace(triggerBuildId, aggregateBuild)
+                }
+            }
+
+            /* A failed round keeps the previously fetched builds, like statuses keep the last known values. */
+            if (branchBuildsResult?.isFailed == false) {
+                val fetchedBuildsChanged = fetchedBuildsCache != branchBuildsResult.builds
+                fetchedBuildsCache = branchBuildsResult.builds
+
+                /* Build metadata can change without a status change, e.g. when a branch was renamed locally. */
+                if (fetchedBuildsChanged) publishStatusesChanged()
+            }
+
+            val fetchedStatuses = if (scheduledBuilds.isEmpty()) fetched else fetchStatuses()
+            val branchBuildStatuses = branchBuildsResult?.builds.orEmpty()
+                .associate { fetchedBuild -> fetchedBuild.build.buildId to fetchedBuild.status }
+            updateStatuses(fetchedStatuses + branchBuildStatuses)
             refreshFailedTestOccurrences()
-            return
+        } finally {
+            setFetchState(fetchEndState(branchBuildsResult))
         }
+    }
 
-        scheduledBuilds.forEach { (triggerBuildId, aggregateBuild) ->
-            store.replace(triggerBuildId, aggregateBuild)
+    private fun fetchEndState(branchBuildsResult: FetchedBranchBuildsResult?): TeamCityFetchState {
+        if (branchBuildsResult == null || branchBuildsResult.isFailed) return TeamCityFetchState.FAILED
+
+        val nothingToShow = branchBuildsResult.builds.isEmpty() &&
+            RememberedTeamCityBuildStore.getInstance(project).builds().isEmpty()
+        return if (nothingToShow) TeamCityFetchState.NO_BUILDS_FOUND else TeamCityFetchState.COMPLETED
+    }
+
+    private fun setFetchState(state: TeamCityFetchState) {
+        if (fetchStateValue == state) return
+
+        fetchStateValue = state
+        if (!project.isDisposed) {
+            project.messageBus.syncPublisher(FETCH_STATE_TOPIC).fetchStateChanged()
         }
-        updateStatuses(fetchStatuses())
-        refreshFailedTestOccurrences()
     }
 
     private fun nextPollingInterval() =
@@ -133,19 +227,17 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
      * Listeners run synchronously, so they are notified outside the lock.
      */
     internal fun updateStatuses(newStatuses: Map<String, TeamCityBuildStatus>) {
-        val rememberedBuildIds = RememberedTeamCityBuildStore.getInstance(project).builds()
-            .map { it.buildId }
-            .toSet()
+        val shownBuildIds = shownBuildIds()
 
         val changed = synchronized(this) {
-            val mergedStatuses = mergeStatuses(statuses, rememberedBuildIds, newStatuses)
+            val mergedStatuses = mergeStatuses(statuses, shownBuildIds, newStatuses)
             val retainedFailedTests = failedTestOccurrences.filter { (buildId, _) ->
                 val counts = mergedStatuses[buildId]?.testCounts
-                buildId in rememberedBuildIds && counts.hasFailedTests()
+                buildId in shownBuildIds && counts.hasFailedTests()
             }
             val retainedFetchCounts = failedTestFetchCounts.filter { (buildId, _) ->
                 val counts = mergedStatuses[buildId]?.testCounts
-                buildId in rememberedBuildIds && counts.hasFailedTests()
+                buildId in shownBuildIds && counts.hasFailedTests()
             }
             val statusesChanged = statuses != mergedStatuses
             val failedTestsChanged = failedTestOccurrences != retainedFailedTests
@@ -189,9 +281,76 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
         return parseBuildStatus(body, build.webUrl)
     }
 
+    /**
+     * The real fetch; internal so tests can restore it after replacing [fetchBranchBuilds].
+     *
+     * Every branch is queried in parallel, plus the build queue once; a branch whose request fails
+     * is skipped, and the round only counts as failed when no request reached TeamCity at all.
+     */
+    internal suspend fun fetchBranchBuildsFromTeamCity(branchNames: List<String>): FetchedBranchBuildsResult {
+        if (branchNames.isEmpty()) return FetchedBranchBuildsResult(emptyList(), isFailed = false)
+
+        return coroutineScope {
+            val localBranchNames = branchNames.toSet()
+            val queuedBuildsDeferred = async { fetchQueuedAggregateBuilds(localBranchNames) }
+            val branchBuildsDeferreds = branchNames.map { branchName ->
+                async { fetchBranchBuildsForBranch(branchName) }
+            }
+
+            val queuedBuilds = queuedBuildsDeferred.await()
+            val branchBuilds = branchBuildsDeferreds.awaitAll()
+
+            val builds = branchBuilds.filterNotNull().flatten() + queuedBuilds.orEmpty()
+            val reachedTeamCity = queuedBuilds != null || branchBuilds.any { it != null }
+
+            FetchedBranchBuildsResult(
+                builds = builds.distinctBy { fetchedBuild -> fetchedBuild.build.buildId },
+                isFailed = !reachedTeamCity,
+            )
+        }
+    }
+
+    private suspend fun fetchBranchBuildsForBranch(branchName: String): List<FetchedTeamCityBuild>? {
+        val body = try {
+            fetchJson(aggregateBuildsUrl(branchName))
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.debug("Unable to fetch the aggregate TeamCity builds of branch $branchName", exception)
+            return null
+        }
+
+        return parseFetchedBranchBuilds(body, branchName)
+    }
+
+    private suspend fun fetchQueuedAggregateBuilds(localBranchNames: Set<String>): List<FetchedTeamCityBuild>? {
+        val body = try {
+            fetchJson(aggregateBuildQueueUrl())
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.debug("Unable to fetch the TeamCity aggregate build queue", exception)
+            return null
+        }
+
+        return parseQueuedBranchBuilds(body, localBranchNames)
+    }
+
+    /**
+     * The local branches whose aggregate runs the tool window fetches.
+     */
+    internal fun monorepoLocalBranchNames(): List<String> =
+        project.kotlinMonorepoRepository()?.branches?.localBranches?.map { branch -> branch.name }.orEmpty()
+
+    /**
+     * The ids of every build the tool window shows: remembered launches and fetched branch builds.
+     */
+    private fun shownBuildIds(): Set<String> =
+        RememberedTeamCityBuildStore.getInstance(project).builds().map { it.buildId }.toSet() +
+            fetchedBuildsCache.map { fetchedBuild -> fetchedBuild.build.buildId }
+
     private suspend fun refreshFailedTestOccurrences() {
-        val buildIds = RememberedTeamCityBuildStore.getInstance(project).builds()
-            .map { build -> build.buildId }
+        val buildIds = shownBuildIds()
         val currentStatuses = statuses
 
         for (buildId in buildIds) {
@@ -202,9 +361,7 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
             if (synchronized(this) { failedTestFetchCounts[buildId] == fetchCounts }) continue
 
             val result = fetchFailedTests(buildId) ?: continue
-            val stillRemembered = RememberedTeamCityBuildStore.getInstance(project).builds()
-                .any { rememberedBuild -> rememberedBuild.buildId == buildId }
-            if (!stillRemembered) continue
+            if (buildId !in shownBuildIds()) continue
 
             val changed = synchronized(this) {
                 val currentCounts = statuses[buildId]?.testCounts
@@ -269,21 +426,21 @@ internal fun resolveScheduledBuilds(
 }
 
 /**
- * Drops statuses of builds that are no longer remembered and keeps the last known status
+ * Drops statuses of builds that are no longer shown and keeps the last known status
  * of builds whose fetch failed this round (missing from [fetched]).
  * A finished status is final: a slower, overlapping fetch round can't turn it back into queued or running.
  */
 internal fun mergeStatuses(
     previous: Map<String, TeamCityBuildStatus>,
-    rememberedBuildIds: Set<String>,
+    shownBuildIds: Set<String>,
     fetched: Map<String, TeamCityBuildStatus>,
 ): Map<String, TeamCityBuildStatus> {
-    val rememberedPrevious = previous.filterKeys { buildId -> buildId in rememberedBuildIds }
-    val rememberedFetched = fetched.filterKeys { buildId -> buildId in rememberedBuildIds }
+    val shownPrevious = previous.filterKeys { buildId -> buildId in shownBuildIds }
+    val shownFetched = fetched.filterKeys { buildId -> buildId in shownBuildIds }
 
-    val newerFetched = rememberedFetched.filter { (buildId, fetchedStatus) ->
-        rememberedPrevious[buildId]?.state != BuildState.FINISHED || fetchedStatus.state == BuildState.FINISHED
+    val newerFetched = shownFetched.filter { (buildId, fetchedStatus) ->
+        shownPrevious[buildId]?.state != BuildState.FINISHED || fetchedStatus.state == BuildState.FINISHED
     }
 
-    return rememberedPrevious + newerFetched
+    return shownPrevious + newerFetched
 }
