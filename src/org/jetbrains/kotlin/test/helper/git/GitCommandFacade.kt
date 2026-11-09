@@ -11,8 +11,12 @@ import git4idea.GitReference
 import git4idea.commands.Git
 import git4idea.commands.GitCommand
 import git4idea.commands.GitLineHandler
+import git4idea.config.GitVcsSettings
 import git4idea.repo.GitRemote
 import git4idea.repo.GitRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.future.await
 import org.jetbrains.kotlin.test.helper.MyBundle
 import java.net.URI
@@ -20,7 +24,6 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
-@Suppress("UnstableApiUsage")
 object Git {
     private val git by lazy { Git.getInstance() }
     private val logger by lazy { logger<Git>() }
@@ -184,6 +187,9 @@ object Git {
 
             return responseBody?.trim()
         } catch (e: Throwable) {
+            if (e is CancellationException) {
+                currentCoroutineContext().ensureActive()
+            }
             logger.error(MyBundle.message("failed.to.fetch.latest.green.master.revision"), e)
             return null
         }
@@ -250,6 +256,50 @@ object Git {
         }
 
         return true
+    }
+
+    /**
+     * The up to [limit] most recently checked out local branches of [repository], the newest checkout first.
+     *
+     * Checkout recency comes from the HEAD reflog, the same source the IDE branch popup's recent branches
+     * use. The branch the IDE remembers for this repository covers the initial branch after a clone, which
+     * the reflog does not record as a checkout. When the reflog cannot be read, the current branch and the
+     * remembered branch are all that is left.
+     */
+    context(project: Project)
+    suspend fun recentlyCheckedOutBranchNames(repository: GitRepository, limit: Int): List<String> {
+        val localBranchNames = repository.branches.localBranches.mapTo(HashSet()) { branch -> branch.name }
+        if (localBranchNames.isEmpty()) return emptyList()
+
+        return recentBranchNames(
+            currentBranchName = repository.currentBranch?.name,
+            reflogCheckoutNames = reflogCheckoutDestinationNames(repository).orEmpty(),
+            rememberedBranchName = GitVcsSettings.getInstance(project).recentBranchesByRepository[repository.root.path],
+            localBranchNames = localBranchNames,
+            limit = limit,
+        )
+    }
+
+    /**
+     * The branch names checked out to, newest checkout first, or null when the reflog could not be read.
+     */
+    context(project: Project)
+    private suspend fun reflogCheckoutDestinationNames(repository: GitRepository): List<String>? = coroutineToIndicator {
+        val result = git.runCommand {
+            GitLineHandler(project, repository.root, GitCommand.REF_LOG).apply {
+                setSilent(true)
+                addParameters("--grep-reflog", "checkout:")
+                endOptions()
+                isEnableInteractiveCallbacks = false
+            }
+        }
+
+        if (!result.success()) {
+            logger.warn("Failed to read the checkout entries of the reflog of ${repository.root}")
+            null
+        } else {
+            parseCheckedOutBranchNames(result.output)
+        }
     }
 
     /**
@@ -347,6 +397,48 @@ internal fun branchPushState(
     aheadCount > 0 && behindCount > 0 -> BranchPushState.Diverged
     aheadCount > 0 -> BranchPushState.Unpushed
     else -> BranchPushState.Pushed
+}
+
+/**
+ * Pure decision core of [Git.recentlyCheckedOutBranchNames]: the up to [limit] recently checked out
+ * branches, the newest checkout first — the current branch, then the reflog destinations, then the
+ * branch remembered by the IDE (which covers the initial branch after a clone). Names that are no
+ * local branch anymore are dropped, e.g. deleted branches and revisions a detached HEAD was checked
+ * out at.
+ */
+internal fun recentBranchNames(
+    currentBranchName: String?,
+    reflogCheckoutNames: List<String>,
+    rememberedBranchName: String?,
+    localBranchNames: Set<String>,
+    limit: Int,
+): List<String> {
+    val candidatesInRecencyOrder = buildList {
+        if (currentBranchName != null) add(currentBranchName)
+        addAll(reflogCheckoutNames)
+        if (rememberedBranchName != null) add(rememberedBranchName)
+    }
+
+    return candidatesInRecencyOrder
+        .filter { branchName -> branchName in localBranchNames }
+        .distinct()
+        .take(limit)
+}
+
+/**
+ * The destinations of reflog checkout entries, in the given order — git lists the newest entry first.
+ * Non-checkout lines are skipped.
+ */
+internal fun parseCheckedOutBranchNames(reflogLines: List<String>): List<String> =
+    reflogLines.mapNotNull(::checkedOutBranchName)
+
+private fun checkedOutBranchName(reflogLine: String): String? {
+    if ("checkout:" !in reflogLine) return null
+
+    val toIndex = reflogLine.lastIndexOf(" to ").takeIf { it > 0 } ?: return null
+    val branchName = reflogLine.substring(toIndex + " to ".length)
+
+    return branchName.takeIf { it.isNotEmpty() }
 }
 
 /**
