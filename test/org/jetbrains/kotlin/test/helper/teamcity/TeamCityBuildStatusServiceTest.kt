@@ -592,6 +592,148 @@ class TeamCityBuildStatusServiceTest : BasePlatformTestCase() {
         assertNoFurtherFetches(statusFetches)
     }
 
+    fun testRefreshFetchesAndReplacesSafeMergeRows() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master", "feature") }
+
+        val safeMergeRow = FetchedTeamCityBuild(
+            build = rememberedBuild("1111003000", launchTimestamp = 42).copy(
+                branchName = "feature",
+                isSafeMerge = true,
+                isSafeMergeDryRun = true,
+            ),
+            status = runningStatus("1111003000"),
+        )
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(listOf(safeMergeRow), isFailed = false) }
+
+        service.requestRefresh()
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111003000" }) delay(10.milliseconds)
+        }
+        assertEquals(runningStatus("1111003000"), service.status("1111003000"))
+
+        /* The safe-merge flags ride through to the shown rows. */
+        val fetchedSafeMerge = service.fetchedBranchBuilds().single()
+        assertTrue(fetchedSafeMerge.isSafeMerge)
+        assertTrue(fetchedSafeMerge.isSafeMergeDryRun)
+
+        /* The next round replaces the branch's safe merges with the newer ones. */
+        val newerSafeMergeRow = FetchedTeamCityBuild(
+            build = rememberedBuild("1111005000", launchTimestamp = 44).copy(
+                branchName = "feature",
+                isSafeMerge = true,
+            ),
+            status = runningStatus("1111005000"),
+        )
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(listOf(newerSafeMergeRow), isFailed = false) }
+        service.requestRefresh()
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111005000" } ||
+                service.fetchState != TeamCityFetchState.COMPLETED
+            ) {
+                delay(10.milliseconds)
+            }
+        }
+
+        assertEquals(listOf(newerSafeMergeRow.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111005000"), service.status("1111005000"))
+    }
+
+    fun testSafeMergeRowsSurviveRoundsOfOtherBranchesAndFailedRounds() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("master") }
+        service.fetchStatuses = { emptyMap() }
+
+        val safeMergeRow = FetchedTeamCityBuild(
+            build = rememberedBuild("1111004000", launchTimestamp = 43).copy(
+                branchName = "feature",
+                isSafeMerge = true,
+            ),
+            status = runningStatus("1111004000"),
+        )
+        val masterFetches = Channel<Unit>(Channel.UNLIMITED)
+        service.fetchBranchBuilds = { branchNames ->
+            if (branchNames == listOf("master")) {
+                masterFetches.send(Unit)
+                FetchedBranchBuildsResult(emptyList(), isFailed = false)
+            } else {
+                FetchedBranchBuildsResult(listOf(safeMergeRow), isFailed = false)
+            }
+        }
+
+        /* The on-demand branch refresh produces the branch's safe merges like a round does. */
+        service.requestBranchRefresh("feature")
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111004000" }) delay(10.milliseconds)
+        }
+        assertEquals(runningStatus("1111004000"), service.status("1111004000"))
+
+        /* Rounds of other branches keep the on-demand safe merges, like any fetched build. */
+        service.requestRefresh()
+        withTimeout(5.seconds) { masterFetches.receive() }
+        withTimeout(5.seconds) { while (service.fetchState != TeamCityFetchState.COMPLETED) delay(10.milliseconds) }
+        assertEquals(listOf(safeMergeRow.build), service.fetchedBranchBuilds())
+
+        /* A failed round keeps the last known safe merges and statuses. */
+        val failedFetches = Channel<Unit>(Channel.UNLIMITED)
+        service.fetchBranchBuilds = {
+            failedFetches.send(Unit)
+            FetchedBranchBuildsResult(emptyList(), isFailed = true)
+        }
+        service.requestRefresh()
+        withTimeout(5.seconds) { failedFetches.receive() }
+        withTimeout(5.seconds) { while (service.fetchState != TeamCityFetchState.FAILED) delay(10.milliseconds) }
+
+        assertEquals(listOf(safeMergeRow.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111004000"), service.status("1111004000"))
+    }
+
+    fun testSafeMergeRowsWhoseGateStatusIsUnknownKeepTheLastKnownStatus() = runBlocking {
+        val service = TeamCityBuildStatusService.getInstance(project)
+        service.associatedBranchNames = { listOf("feature") }
+        service.fetchStatuses = { emptyMap() }
+
+        val safeMergeRow = FetchedTeamCityBuild(
+            build = rememberedBuild("1111003000", launchTimestamp = 42).copy(
+                branchName = "feature",
+                isSafeMerge = true,
+            ),
+            status = runningStatus("1111003000"),
+        )
+        service.fetchBranchBuilds = { FetchedBranchBuildsResult(listOf(safeMergeRow), isFailed = false) }
+
+        service.requestRefresh()
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111003000" }) delay(10.milliseconds)
+        }
+        assertEquals(runningStatus("1111003000"), service.status("1111003000"))
+
+        /* A gate whose status fetch failed keeps the row with its last known status, and a first-seen
+           gate without a status stays unknown instead of getting one. */
+        val unknownGateRow = FetchedTeamCityBuild(
+            build = rememberedBuild("1111006000", launchTimestamp = 45).copy(
+                branchName = "feature",
+                isSafeMerge = true,
+            ),
+            status = null,
+        )
+        service.fetchBranchBuilds = {
+            FetchedBranchBuildsResult(listOf(safeMergeRow.copy(status = null), unknownGateRow), isFailed = false)
+        }
+        service.requestRefresh()
+        withTimeout(5.seconds) {
+            while (service.fetchedBranchBuilds().none { build -> build.buildId == "1111006000" } ||
+                service.fetchState != TeamCityFetchState.COMPLETED
+            ) {
+                delay(10.milliseconds)
+            }
+        }
+
+        assertEquals(listOf(safeMergeRow.build, unknownGateRow.build), service.fetchedBranchBuilds())
+        assertEquals(runningStatus("1111003000"), service.status("1111003000"))
+        assertNull(service.status("1111006000"))
+    }
+
     /**
      * The light project is shared between tests, so statuses, polling and the store must not leak.
      */

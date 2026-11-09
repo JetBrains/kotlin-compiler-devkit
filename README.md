@@ -160,9 +160,11 @@ The "Remote Run" tool window launches and follows the aggregate TeamCity test ru
 
 - **Launch Test Run** runs the checked out branch; right-click any branch to run it instead.
 - Builds show their status, test counts and elapsed time; failed tests can be expanded and navigated to.
-- The newest TeamCity runs of the 10 most recently checked out local branches are fetched on each refresh — the
-  refresh button itself turns into a spinner while fetching, and a status line under the tree explains the outcome.
-  Any branch can also be fetched on demand from its context menu ("Refresh Branch").
+- The newest TeamCity runs of the 10 most recently checked out local branches are fetched on each refresh, including
+  safe merges — shown with dedicated safe-merge icons (dry runs say so in the icon, row and tooltip) and following
+  the aggregate gate they launched. The refresh button itself turns into a spinner while fetching, and a status
+  line under the tree explains the outcome. Any branch can also be fetched on demand from its context menu
+  ("Refresh Branch").
 - Branches can be searched; their icon shows the latest run status.
 - Running builds can be stopped; a new launch offers to stop unfinished runs on the same branch.
 

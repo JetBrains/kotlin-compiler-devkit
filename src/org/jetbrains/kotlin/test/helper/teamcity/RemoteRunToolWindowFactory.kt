@@ -829,7 +829,14 @@ private class RemoteRunToolWindowPanel(
                     val status = TeamCityBuildStatusService.getInstance(project).status(value.build.buildId)
                     val isScheduling = isSchedulingInProgress(value.build, status)
 
-                    icon = if (isScheduling) AnimatedIcon.Default.INSTANCE else buildStatusIcon(status)
+                    /* Safe merges carry their own icons instead of the status marks; running gates keep the spinner. */
+                    icon = when {
+                        isScheduling || (value.build.isSafeMerge && status?.state == BuildState.RUNNING) ->
+                            AnimatedIcon.Default.INSTANCE
+                        value.build.isSafeMergeDryRun -> safeMergeBuildIcon(isDryRun = true, status)
+                        value.build.isSafeMerge -> safeMergeBuildIcon(isDryRun = false, status)
+                        else -> buildStatusIcon(status)
+                    }
                     if (isScheduling) {
                         append(
                             MyBundle.message("teamcity.build.scheduling.aggregate"),
@@ -837,6 +844,12 @@ private class RemoteRunToolWindowPanel(
                         )
                     } else {
                         appendBuildSummary(status)
+                    }
+                    if (value.build.isSafeMergeDryRun) {
+                        append(
+                            " · " + MyBundle.message("teamcity.build.safe.merge.dry.run"),
+                            SimpleTextAttributes.GRAYED_ATTRIBUTES,
+                        )
                     }
                     elapsedStartTimestamp(value.build, status, isScheduling)?.let { startTimestamp ->
                         val elapsed = formatElapsed(System.currentTimeMillis() - startTimestamp)
@@ -941,6 +954,15 @@ private class RemoteRunToolWindowPanel(
         }
 
         val tooltip = MyBundle.message("teamcity.build.tooltip", build.branchName, stateText, status?.statusText.orEmpty())
-        return XmlStringUtil.wrapInHtml(StringUtil.escapeXmlEntities(tooltip.trimEnd()).replace("\n", "<br>"))
+        val safeMergeLine = when {
+            build.isSafeMergeDryRun -> MyBundle.message("teamcity.build.tooltip.safe.merge.dry.run")
+            build.isSafeMerge -> MyBundle.message("teamcity.build.tooltip.safe.merge")
+            else -> null
+        }
+        val tooltipWithSafeMerge = safeMergeLine?.let { line -> "$line\n$tooltip" } ?: tooltip
+
+        return XmlStringUtil.wrapInHtml(
+            StringUtil.escapeXmlEntities(tooltipWithSafeMerge.trimEnd()).replace("\n", "<br>")
+        )
     }
 }
