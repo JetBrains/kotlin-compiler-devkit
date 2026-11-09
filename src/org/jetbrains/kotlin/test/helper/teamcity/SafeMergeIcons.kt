@@ -29,7 +29,7 @@ internal object SafeMergeIcons {
     val SafeMergeDryRun: Icon = IconLoader.getIcon(SAFE_MERGE_DRY_RUN_PATH, SafeMergeIcons::class.java)
 
     /**
-     * [SafeMerge] in green: the safe merge succeeded.
+     * [SafeMerge] in green, with a check mark in the shield: the safe merge succeeded.
      */
     @JvmField
     val SafeMergeSuccess: Icon = IconLoader.getIcon(SAFE_MERGE_SUCCESS_PATH, SafeMergeIcons::class.java)
@@ -41,7 +41,7 @@ internal object SafeMergeIcons {
     val SafeMergeFailure: Icon = IconLoader.getIcon(SAFE_MERGE_FAILURE_PATH, SafeMergeIcons::class.java)
 
     /**
-     * [SafeMergeDryRun] in green: the dry run succeeded.
+     * [SafeMergeDryRun] in green, with a check mark in the shield: the dry run succeeded.
      */
     @JvmField
     val SafeMergeDryRunSuccess: Icon =
