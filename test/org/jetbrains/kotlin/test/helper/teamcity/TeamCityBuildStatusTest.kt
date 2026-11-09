@@ -256,6 +256,26 @@ class TeamCityBuildStatusTest {
         assertSame(buildQueuedIcon, buildStatusIcon(queued))
         assertSame(buildUnknownIcon, buildStatusIcon(null))
     }
+
+    @Test
+    fun selectsSafeMergeIconByFinishedStatus() {
+        val finishedSuccess = status(state = BuildState.FINISHED, isSuccessful = true)
+        val finishedFailure = status(state = BuildState.FINISHED, isSuccessful = false)
+        val finishedUnknown = status(state = BuildState.FINISHED, isSuccessful = null)
+        val runningWithPreliminarySuccess = status(state = BuildState.RUNNING, isSuccessful = true)
+
+        assertSame(SafeMergeIcons.SafeMergeSuccess, safeMergeBuildIcon(isDryRun = false, finishedSuccess))
+        assertSame(SafeMergeIcons.SafeMergeFailure, safeMergeBuildIcon(isDryRun = false, finishedFailure))
+        assertSame(SafeMergeIcons.SafeMerge, safeMergeBuildIcon(isDryRun = false, finishedUnknown))
+        assertSame(SafeMergeIcons.SafeMerge, safeMergeBuildIcon(isDryRun = false, runningWithPreliminarySuccess))
+        assertSame(SafeMergeIcons.SafeMerge, safeMergeBuildIcon(isDryRun = false, null))
+
+        assertSame(SafeMergeIcons.SafeMergeDryRunSuccess, safeMergeBuildIcon(isDryRun = true, finishedSuccess))
+        assertSame(SafeMergeIcons.SafeMergeDryRunFailure, safeMergeBuildIcon(isDryRun = true, finishedFailure))
+        assertSame(SafeMergeIcons.SafeMergeDryRun, safeMergeBuildIcon(isDryRun = true, finishedUnknown))
+        assertSame(SafeMergeIcons.SafeMergeDryRun, safeMergeBuildIcon(isDryRun = true, runningWithPreliminarySuccess))
+        assertSame(SafeMergeIcons.SafeMergeDryRun, safeMergeBuildIcon(isDryRun = true, null))
+    }
 }
 
 private fun status(

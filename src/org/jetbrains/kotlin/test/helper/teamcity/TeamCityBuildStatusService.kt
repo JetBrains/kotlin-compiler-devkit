@@ -31,8 +31,9 @@ internal enum class TeamCityFetchState { IN_PROGRESS, COMPLETED, NO_BUILDS_FOUND
  * Caches the live status of every TeamCity build the tool window shows; the tool window reads only this cache.
  *
  * That covers the remembered builds launched from the IDE, the latest aggregate builds of the most
- * recently checked out branches (fetched in the same rounds) and the aggregate builds fetched on
- * demand per branch ([requestBranchRefresh]); the fetched builds live in memory only (never persisted).
+ * recently checked out branches (fetched in the same rounds, together with their safe merges — the
+ * aggregate gate builds the Safe-Merge Coordinator launched) and the builds fetched on demand per
+ * branch ([requestBranchRefresh]); the fetched builds live in memory only (never persisted).
  * Everything is fetched via guest REST while [setPollingActive] is on (the Remote Run tool window is
  * visible), plus once per [requestRefresh] (the refresh button, or right after launching a build).
  * Finished builds are final, so their statuses are fetched only until their finished status is known.
@@ -66,8 +67,9 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     private var failedTestFetchCounts: Map<String, FailedTestFetchCounts> = emptyMap()
 
     /**
-     * The aggregate builds fetched for branches; in memory only. A round replaces the builds of the
-     * branches it fetches, builds fetched through [requestBranchRefresh] survive later rounds.
+     * The builds fetched for branches — aggregates and safe merges; in memory only. A round replaces
+     * the builds of the branches it fetches, builds fetched through [requestBranchRefresh] survive
+     * later rounds.
      */
     @Volatile
     private var fetchedBuildsCache: List<FetchedTeamCityBuild> = emptyList()
@@ -118,8 +120,8 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     fun failedTests(buildId: String): FailedTestsResult? = failedTestOccurrences[buildId]
 
     /**
-     * The aggregate builds fetched for branches — by the rounds and the per-branch refresh —
-     * without their statuses (read those with [status]).
+     * The builds fetched for branches — aggregates and safe merges, by the rounds and the per-branch
+     * refresh — without their statuses (read those with [status]).
      */
     fun fetchedBranchBuilds(): List<RememberedTeamCityBuild> =
         fetchedBuildsCache.map { fetchedBuild -> fetchedBuild.build }
@@ -172,8 +174,8 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     }
 
     /**
-     * Fetches the aggregate builds of [branchName] outside the regular rounds — the context-menu
-     * action for branches the rounds do not cover — and merges them into the fetched builds.
+     * Fetches the aggregate builds and safe merges of [branchName] outside the regular rounds — the
+     * context-menu action for branches the rounds do not cover — and merges them into the fetched builds.
      */
     fun requestBranchRefresh(branchName: String) {
         scope.launch {
@@ -219,8 +221,13 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
             }
 
             val fetchedStatuses = if (scheduledBuilds.isEmpty()) fetched else fetchStatuses()
+
+            /* Builds without a status this round — e.g. safe-merge gates whose status fetch failed —
+               keep their last known status instead of getting one associated. */
             val branchBuildStatuses = branchBuildsResult?.builds.orEmpty()
-                .associate { fetchedBuild -> fetchedBuild.build.buildId to fetchedBuild.status }
+                .mapNotNull { fetchedBuild ->
+                    fetchedBuild.status?.let { status -> fetchedBuild.build.buildId to status }
+                }
             updateStatuses(fetchedStatuses + branchBuildStatuses)
             refreshFailedTestOccurrences()
         } finally {
@@ -261,11 +268,12 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
                 val fetchedBuildsChanged = fetchedBuildsCache != mergedBuilds
                 fetchedBuildsCache = mergedBuilds
 
-                /* The new builds must be part of the shown ones before their statuses can be merged in. */
+                /* The new builds must be part of the shown ones before their statuses can be merged in.
+                   Builds without a status this round keep their last known one. */
                 updateStatuses(
-                    branchBuildsResult.builds.associate { fetchedBuild ->
-                        fetchedBuild.build.buildId to fetchedBuild.status
-                    },
+                    branchBuildsResult.builds.mapNotNull { fetchedBuild ->
+                        fetchedBuild.status?.let { status -> fetchedBuild.build.buildId to status }
+                    }.toMap(),
                 )
                 refreshFailedTestOccurrences()
 
@@ -375,8 +383,9 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     /**
      * The real fetch; internal so tests can restore it after replacing [fetchBranchBuilds].
      *
-     * Every branch is queried in parallel, plus the build queue once; a branch whose request fails
-     * is skipped, and the round only counts as failed when no request reached TeamCity at all.
+     * Every branch's aggregate builds and — except for 'master' — its safe merges are queried in
+     * parallel, plus the build queue once; a branch whose request fails is skipped, and the round only
+     * counts as failed when no request reached TeamCity at all.
      */
     internal suspend fun fetchBranchBuildsFromTeamCity(branchNames: List<String>): FetchedBranchBuildsResult {
         if (branchNames.isEmpty()) return FetchedBranchBuildsResult(emptyList(), isFailed = false)
@@ -387,12 +396,18 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
             val branchBuildsDeferreds = branchNames.map { branchName ->
                 async { fetchBranchBuildsForBranch(branchName) }
             }
+            val safeMergeBuildsDeferreds = branchNames
+                .filterNot { branchName -> branchName == MASTER_BRANCH_NAME }
+                .map { branchName -> async { fetchSafeMergeBuildsForBranch(branchName) } }
 
             val queuedBuilds = queuedBuildsDeferred.await()
             val branchBuilds = branchBuildsDeferreds.awaitAll()
+            val safeMergeBuilds = safeMergeBuildsDeferreds.awaitAll()
 
-            val builds = branchBuilds.filterNotNull().flatten() + queuedBuilds.orEmpty()
-            val reachedTeamCity = queuedBuilds != null || branchBuilds.any { it != null }
+            val builds = (branchBuilds + safeMergeBuilds).filterNotNull().flatten() + queuedBuilds.orEmpty()
+            val reachedTeamCity = queuedBuilds != null ||
+                branchBuilds.any { it != null } ||
+                safeMergeBuilds.any { it != null }
 
             FetchedBranchBuildsResult(
                 builds = builds.distinctBy { fetchedBuild -> fetchedBuild.build.buildId },
@@ -412,6 +427,47 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
         }
 
         return parseFetchedBranchBuilds(body, branchName)
+    }
+
+    /**
+     * The safe merges of [branchName]: one row per coordinator build — the gate build its comment
+     * names, else the coordinator build itself — with the gate's status, or the coordinator's while
+     * no gate is known. Null when the coordinator list cannot be fetched or read.
+     */
+    private suspend fun fetchSafeMergeBuildsForBranch(branchName: String): List<FetchedTeamCityBuild>? {
+        val body = try {
+            fetchJson(safeMergeCoordinatorBuildsUrl(branchName))
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.debug("Unable to fetch the Safe-Merge Coordinator builds of branch $branchName", exception)
+            return null
+        }
+
+        val safeMerges = parseSafeMergeCoordinatorBuilds(body, branchName) ?: return null
+
+        return safeMerges.map { safeMerge ->
+            val status = if (safeMerge.gateBuildId == null) {
+                safeMerge.coordinatorStatus
+            } else {
+                gateStatusOrNull(safeMerge, statuses[safeMerge.build.buildId], ::fetchGateBuildStatusFromTeamCity)
+            }
+
+            FetchedTeamCityBuild(safeMerge.build, status)
+        }
+    }
+
+    private suspend fun fetchGateBuildStatusFromTeamCity(gateBuildId: String): TeamCityBuildStatus? {
+        val body = try {
+            fetchJson(buildStatusUrl(gateBuildId))
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.debug("Unable to fetch the TeamCity status of safe-merge gate build $gateBuildId", exception)
+            return null
+        }
+
+        return parseBuildStatus(body, "$TEAMCITY_SERVER_URL/build/$gateBuildId")
     }
 
     private suspend fun fetchQueuedAggregateBuilds(localBranchNames: Set<String>): List<FetchedTeamCityBuild>? {

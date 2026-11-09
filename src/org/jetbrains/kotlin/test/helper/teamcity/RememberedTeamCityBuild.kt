@@ -21,6 +21,10 @@ internal data class RememberedTeamCityBuild(
     val branchName: String,
     val launchTimestamp: Long,
     val isAggregateTrigger: Boolean = false,
+    /** Set for fetched safe merges, never for remembered launches: launched via the Safe-Merge Coordinator. */
+    val isSafeMerge: Boolean = false,
+    /** Only set when [isSafeMerge] holds: the coordinator ran as a dry run, so nothing was merged. */
+    val isSafeMergeDryRun: Boolean = false,
 )
 
 internal fun interface RememberedBuildsListener {
@@ -139,6 +143,8 @@ internal class RememberedTeamCityBuildBean {
     var branchName: String? = null
     var launchTimestamp: Long = 0
     var isAggregateTrigger: Boolean = false
+    var isSafeMerge: Boolean = false
+    var isSafeMergeDryRun: Boolean = false
 
     fun copy(): RememberedTeamCityBuildBean =
         RememberedTeamCityBuildBean().also { beanCopy ->
@@ -147,6 +153,8 @@ internal class RememberedTeamCityBuildBean {
             beanCopy.branchName = branchName
             beanCopy.launchTimestamp = launchTimestamp
             beanCopy.isAggregateTrigger = isAggregateTrigger
+            beanCopy.isSafeMerge = isSafeMerge
+            beanCopy.isSafeMergeDryRun = isSafeMergeDryRun
         }
 }
 
@@ -157,6 +165,8 @@ internal fun toRememberedTeamCityBuildBean(build: RememberedTeamCityBuild): Reme
         branchName = build.branchName
         launchTimestamp = build.launchTimestamp
         isAggregateTrigger = build.isAggregateTrigger
+        isSafeMerge = build.isSafeMerge
+        isSafeMergeDryRun = build.isSafeMergeDryRun
     }
 
 internal fun toRememberedTeamCityBuild(bean: RememberedTeamCityBuildBean): RememberedTeamCityBuild? =
@@ -166,4 +176,6 @@ internal fun toRememberedTeamCityBuild(bean: RememberedTeamCityBuildBean): Remem
         branchName = bean.branchName ?: return null,
         launchTimestamp = bean.launchTimestamp,
         isAggregateTrigger = bean.isAggregateTrigger,
+        isSafeMerge = bean.isSafeMerge,
+        isSafeMergeDryRun = bean.isSafeMergeDryRun,
     )

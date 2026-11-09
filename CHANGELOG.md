@@ -4,7 +4,9 @@
 
 ## Unreleased
 - Add the "Remote Run" tool window: launch, follow and stop aggregate TeamCity test runs for local branches, with test
-  counts and navigation to failed tests. See [docs/remote-run.md](docs/remote-run.md).
+  counts and navigation to failed tests. The runs of the recently checked out branches are fetched automatically —
+  including safe merges, which are marked by dedicated safe-merge icons and follow the aggregate gate the
+  Safe-Merge Coordinator launched. See [docs/remote-run.md](docs/remote-run.md).
 
 ## 1.0.113
 - Migrate test data manager actions to the `checkTestData` / `updateTestData` Gradle tasks (options passed as `-P` properties). The removed `manageTestDataGlobally` task is no longer used.

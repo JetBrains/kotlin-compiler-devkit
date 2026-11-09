@@ -1,0 +1,13 @@
+<!-- Outlined Safe Merge Dry Run icon (Compact Mode, 16x16). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <g stroke="#6C707E" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="2.5" cy="13.5" r="1.5"/>
+        <circle cx="8.5" cy="13.5" r="1.5"/>
+        <path d="M2.5 12C2.5 9.5 5.5 9.5 5.5 7"/>
+        <path d="M8.5 12C8.5 9.5 5.5 9.5 5.5 7" stroke-dasharray="0.75 2.29" stroke-dashoffset="1.89"/>
+        <path d="M5.5 7V1.5" stroke-dasharray="0.75 2" stroke-dashoffset="1.75"/>
+        <path d="M3.5 3.5L5.5 1.5L7.5 3.5"/>
+        <path d="M12.25 1L15 2V4.3C15 6.2 13.9 7.6 12.25 8.5C10.6 7.6 9.5 6.2 9.5 4.3V2Z" stroke-dasharray="0.5 2.13"/>
+        <path d="M11 4.6L11.9 5.5L13.5 3.7"/>
+    </g>
+</svg>
