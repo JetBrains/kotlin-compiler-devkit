@@ -2,6 +2,10 @@ package org.jetbrains.kotlin.test.helper.teamcity
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import javax.swing.JTree
+import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.TreePath
 
 class RemoteRunBranchTreeTest {
     private val branches = listOf("master", "sellmair/fed/test-2", "rr/sellmair/KT-123", "backup/old")
@@ -79,6 +83,68 @@ class RemoteRunBranchTreeTest {
 
         assertEquals(fetched, mergeRememberedAndFetchedBuilds(remembered = emptyList(), fetched = fetched))
     }
+
+    @Test
+    fun contextMenuPathCoversTheEntireRow() {
+        val (tree, branchPath, _, _) = treeWithNestedRows()
+        val rowBounds = requireNotNull(tree.getPathBounds(branchPath))
+        val rowY = rowBounds.y + rowBounds.height / 2
+
+        assertEquals(branchPath, treePathForContextMenuAt(tree, rowBounds.x + rowBounds.width / 2, rowY))
+        assertEquals(branchPath, treePathForContextMenuAt(tree, 0, rowY))
+        assertEquals(branchPath, treePathForContextMenuAt(tree, tree.width - 1, rowY))
+    }
+
+    @Test
+    fun contextMenuPathUsesTheNestedRowUnderThePointer() {
+        val (tree, _, buildPath, _) = treeWithNestedRows()
+        val rowBounds = requireNotNull(tree.getPathBounds(buildPath))
+        val rowY = rowBounds.y + rowBounds.height / 2
+
+        assertEquals(buildPath, treePathForContextMenuAt(tree, tree.width - 1, rowY))
+    }
+
+    @Test
+    fun contextMenuPathRejectsPointsOutsideTheTreeRows() {
+        val (tree, branchPath, _, lastBranchPath) = treeWithNestedRows()
+        val rowBounds = requireNotNull(tree.getPathBounds(branchPath))
+        val rowY = rowBounds.y + rowBounds.height / 2
+        val lastRowBounds = requireNotNull(tree.getPathBounds(lastBranchPath))
+
+        assertNull(treePathForContextMenuAt(tree, -1, rowY))
+        assertNull(treePathForContextMenuAt(tree, tree.width, rowY))
+        assertNull(treePathForContextMenuAt(tree, tree.width - 1, lastRowBounds.y + lastRowBounds.height))
+    }
+
+    private fun treeWithNestedRows(): TreeFixture {
+        val root = DefaultMutableTreeNode("root")
+        val branch = DefaultMutableTreeNode("branch")
+        val build = DefaultMutableTreeNode("build")
+        val lastBranch = DefaultMutableTreeNode("last branch")
+        root.add(branch)
+        branch.add(build)
+        root.add(lastBranch)
+
+        val tree = JTree(root)
+        val rootPath = TreePath(root.path)
+        val branchPath = TreePath(branch.path)
+        val buildPath = TreePath(build.path)
+        val lastBranchPath = TreePath(lastBranch.path)
+        tree.isRootVisible = false
+        tree.rowHeight = 24
+        tree.expandPath(rootPath)
+        tree.expandPath(branchPath)
+        tree.setSize(300, 120)
+
+        return TreeFixture(tree, branchPath, buildPath, lastBranchPath)
+    }
+
+    private data class TreeFixture(
+        val tree: JTree,
+        val branchPath: TreePath,
+        val buildPath: TreePath,
+        val lastBranchPath: TreePath,
+    )
 
     private fun build() =
         RememberedTeamCityBuild(
