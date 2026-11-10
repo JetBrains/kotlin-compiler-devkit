@@ -43,6 +43,7 @@ internal const val MASTER_BRANCH_NAME: String = "master"
 internal data class FetchedTeamCityBuild(
     val build: RememberedTeamCityBuild,
     val status: TeamCityBuildStatus?,
+    val coordinatorBuildId: String? = null,
 )
 
 /**
@@ -63,6 +64,7 @@ internal data class FetchedSafeMerge(
     val build: RememberedTeamCityBuild,
     val coordinatorStatus: TeamCityBuildStatus,
     val gateBuildId: String?,
+    val coordinatorBuildId: String,
 )
 
 /**
@@ -247,6 +249,7 @@ private fun safeMergeFromJson(buildJson: JsonObject, localBranchName: String): F
         ),
         coordinatorStatus = coordinatorStatus,
         gateBuildId = gateBuildId,
+        coordinatorBuildId = buildId,
     )
 }
 

@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.kotlin.test.helper.MyBundle
+import org.jetbrains.kotlin.test.helper.github.OpenKotlinPullRequest
 import java.io.File
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -50,9 +51,21 @@ internal fun runStartCommandLine(
     buildTypeId: String,
     branchName: String,
     workingDirectory: File?,
-): GeneralCommandLine =
-    teamCityCommandLine(cliPath, workingDirectory)
-        .withParameters("run", "start", buildTypeId, "--branch", branchName, "--no-push", "--json", "--no-input")
+    environmentVariables: List<Pair<String, String>> = emptyList(),
+): GeneralCommandLine {
+    val commandParameters =
+        listOf("run", "start", buildTypeId, "--branch", branchName, "--no-push", "--json", "--no-input") +
+            environmentVariables.flatMap { (name, value) -> listOf("-E", "$name=$value") }
+
+    return teamCityCommandLine(cliPath, workingDirectory)
+        .withParameters(*commandParameters.toTypedArray())
+}
+
+internal fun safeMergeDryRunEnvironment(pullRequest: OpenKotlinPullRequest): List<Pair<String, String>> = listOf(
+    "SPACE_MERGE_ROBOT_MODE" to "Dry Run",
+    "SPACE_MERGE_REQUEST_URL" to pullRequest.url,
+    "HEAD_SHA" to pullRequest.headSha,
+)
 
 internal fun runCancelCommandLine(cliPath: String, buildId: String, workingDirectory: File?): GeneralCommandLine =
     teamCityCommandLine(cliPath, workingDirectory)
@@ -163,6 +176,9 @@ internal fun isVersionAtLeast(version: String?, minimum: String): Boolean =
  */
 internal fun cliInstallHint(): String = MyBundle.message("teamcity.cli.install.hint")
 
+internal fun isBuildId(text: String): Boolean =
+    text.isNotEmpty() && text.all(Char::isDigit)
+
 private fun teamCityCommandLine(cliPath: String, workingDirectory: File?): GeneralCommandLine =
     GeneralCommandLine(cliPath)
         .withWorkingDirectory(workingDirectory?.toPath())
@@ -176,9 +192,6 @@ private fun parseJsonOrNull(output: String): JsonElement? =
     } catch (_: SerializationException) {
         null
     }
-
-internal fun isBuildId(text: String): Boolean =
-    text.isNotEmpty() && text.all(Char::isDigit)
 
 private fun JsonObject.stringOrNull(key: String): String? {
     val value = get(key) as? JsonPrimitive ?: return null

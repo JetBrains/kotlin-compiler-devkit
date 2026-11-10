@@ -21,7 +21,7 @@ internal data class RememberedTeamCityBuild(
     val branchName: String,
     val launchTimestamp: Long,
     val isAggregateTrigger: Boolean = false,
-    /** Set for fetched safe merges, never for remembered launches: launched via the Safe-Merge Coordinator. */
+    /** Set for safe merges launched via the Safe-Merge Coordinator, whether fetched or started from the IDE. */
     val isSafeMerge: Boolean = false,
     /** Only set when [isSafeMerge] holds: the coordinator ran as a dry run, so nothing was merged. */
     val isSafeMergeDryRun: Boolean = false,

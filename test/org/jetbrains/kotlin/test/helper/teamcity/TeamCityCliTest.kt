@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.test.helper.teamcity
 
+import org.jetbrains.kotlin.test.helper.github.OpenKotlinPullRequest
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,6 +26,33 @@ class TeamCityCliTest {
             commandLine.parametersList.parameters,
         )
         assertEquals(workingDirectory.toPath(), commandLine.workingDirectory)
+    }
+
+    @Test
+    fun buildsSafeMergeDryRunCommandWithPullRequestEnvironment() {
+        val commandLine = runStartCommandLine(
+            cliPath = "/usr/local/bin/teamcity",
+            buildTypeId = SAFE_MERGE_COORDINATOR_BUILD_TYPE_ID,
+            branchName = "feature/kt-123456",
+            workingDirectory = null,
+            environmentVariables = safeMergeDryRunEnvironment(
+                OpenKotlinPullRequest(
+                    url = "https://github.com/JetBrains/kotlin/pull/42",
+                    headSha = "0123456789abcdef0123456789abcdef01234567",
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                "run", "start", SAFE_MERGE_COORDINATOR_BUILD_TYPE_ID, "--branch", "feature/kt-123456",
+                "--no-push", "--json", "--no-input",
+                "-E", "SPACE_MERGE_ROBOT_MODE=Dry Run",
+                "-E", "SPACE_MERGE_REQUEST_URL=https://github.com/JetBrains/kotlin/pull/42",
+                "-E", "HEAD_SHA=0123456789abcdef0123456789abcdef01234567",
+            ),
+            commandLine.parametersList.parameters,
+        )
     }
 
     @Test

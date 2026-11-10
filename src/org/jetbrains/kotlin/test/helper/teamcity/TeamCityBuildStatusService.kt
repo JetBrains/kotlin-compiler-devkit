@@ -190,7 +190,10 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
         var branchBuildsResult: FetchedBranchBuildsResult? = null
         try {
             branchBuildsResult = try {
-                branchNames = associatedBranchNames()
+                val rememberedBuilds = RememberedTeamCityBuildStore.getInstance(project).builds()
+                val recentBranchNames = associatedBranchNames()
+                val unfinishedSafeMergeBranchNames = branchesWithUnfinishedSafeMerges(rememberedBuilds, statuses)
+                branchNames = (recentBranchNames + unfinishedSafeMergeBranchNames).distinct()
                 automaticallyFetchedBranchNames = branchNames.toSet()
                 fetchBranchBuilds(branchNames)
             } catch (exception: CancellationException) {
@@ -202,6 +205,7 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
 
             val fetched = fetchStatuses()
             val store = RememberedTeamCityBuildStore.getInstance(project)
+            reconcileLaunchedSafeMergeBuilds(store, branchBuildsResult?.builds.orEmpty())
             val scheduledBuilds = resolveScheduledBuilds(store.builds(), fetched)
 
             if (scheduledBuilds.isNotEmpty()) {
@@ -263,6 +267,10 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
             }
 
             if (branchBuildsResult?.isFailed == false) {
+                reconcileLaunchedSafeMergeBuilds(
+                    RememberedTeamCityBuildStore.getInstance(project),
+                    branchBuildsResult.builds,
+                )
                 val mergedBuilds =
                     mergeFetchedBranchBuilds(fetchedBuildsCache, listOf(branchName), branchBuildsResult.builds)
                 val fetchedBuildsChanged = fetchedBuildsCache != mergedBuilds
@@ -340,6 +348,15 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
     private fun publishStatusesChanged() {
         if (project.isDisposed) return
         project.messageBus.syncPublisher(STATUSES_CHANGED_TOPIC).buildStatusesChanged()
+    }
+
+    private fun reconcileLaunchedSafeMergeBuilds(
+        store: RememberedTeamCityBuildStore,
+        fetchedBuilds: List<FetchedTeamCityBuild>,
+    ) {
+        launchedSafeMergeBuildReplacements(store.builds(), fetchedBuilds).forEach { (coordinatorBuildId, gateBuild) ->
+            store.replace(coordinatorBuildId, gateBuild)
+        }
     }
 
     /**
@@ -453,7 +470,7 @@ internal class TeamCityBuildStatusService(private val project: Project, private 
                 gateStatusOrNull(safeMerge, statuses[safeMerge.build.buildId], ::fetchGateBuildStatusFromTeamCity)
             }
 
-            FetchedTeamCityBuild(safeMerge.build, status)
+            FetchedTeamCityBuild(safeMerge.build, status, safeMerge.coordinatorBuildId)
         }
     }
 
@@ -612,4 +629,38 @@ internal fun mergeFetchedBranchBuilds(
 
     return fetchedBuilds.filterNot { fetchedBuild -> fetchedBuild.build.branchName in fetchedBranchNameSet } +
         buildsOfFetchedBranches
+}
+
+/**
+ * Safe-merge branches stay in the regular fetch set until their remembered coordinator or gate build finishes.
+ */
+internal fun branchesWithUnfinishedSafeMerges(
+    rememberedBuilds: List<RememberedTeamCityBuild>,
+    statuses: Map<String, TeamCityBuildStatus>,
+): List<String> = rememberedBuilds
+    .filter { build -> build.isSafeMerge && statuses[build.buildId]?.state != BuildState.FINISHED }
+    .map { build -> build.branchName }
+    .distinct()
+
+/**
+ * Replaces a locally launched Safe-Merge Coordinator row with the gate build it spawned once TeamCity reports it.
+ */
+internal fun launchedSafeMergeBuildReplacements(
+    rememberedBuilds: List<RememberedTeamCityBuild>,
+    fetchedBuilds: List<FetchedTeamCityBuild>,
+): List<Pair<String, RememberedTeamCityBuild>> {
+    val buildsByCoordinatorId = fetchedBuilds.mapNotNull { fetchedBuild ->
+        fetchedBuild.coordinatorBuildId?.let { coordinatorBuildId -> coordinatorBuildId to fetchedBuild.build }
+    }.toMap()
+
+    return rememberedBuilds.mapNotNull { rememberedBuild ->
+        if (!rememberedBuild.isSafeMerge) return@mapNotNull null
+
+        val gateBuild = buildsByCoordinatorId[rememberedBuild.buildId] ?: return@mapNotNull null
+        rememberedBuild.buildId to gateBuild.copy(
+            launchTimestamp = rememberedBuild.launchTimestamp,
+            isSafeMerge = true,
+            isSafeMergeDryRun = rememberedBuild.isSafeMergeDryRun || gateBuild.isSafeMergeDryRun,
+        )
+    }
 }

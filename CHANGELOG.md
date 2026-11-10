@@ -7,6 +7,14 @@
   counts and navigation to failed tests. The runs of the recently checked out branches are fetched automatically —
   including safe merges, which are marked by dedicated safe-merge icons and follow the aggregate gate the
   Safe-Merge Coordinator launched. See [docs/remote-run.md](docs/remote-run.md).
+- Add "Launch: Safe Merge Dry Run (Rebase)" to the branch context menu of the "Remote Run" tool window: it resolves the
+  branch's open `JetBrains/kotlin` pull request and starts the Safe-Merge Coordinator in dry-run mode, following
+  the aggregate gate it launches.
+- Mark branches with an open `JetBrains/kotlin` pull request with a GitHub logo in the "Remote Run" tool window and
+  add "Open Pull Request" to their context menu; the open pull request of every listed branch is resolved through the
+  GitHub plugin, at most once a minute. The GitHub requests — also of the safe-merge pull-request resolution —
+  authenticate with the GitHub account configured in the IDE, which GitHub's GraphQL API effectively requires. See
+  [docs/remote-run.md](docs/remote-run.md).
 
 ## 1.0.113
 - Migrate test data manager actions to the `checkTestData` / `updateTestData` Gradle tasks (options passed as `-P` properties). The removed `manageTestDataGlobally` task is no longer used.

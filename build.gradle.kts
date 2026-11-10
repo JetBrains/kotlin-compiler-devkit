@@ -28,6 +28,7 @@ dependencies {
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.jetbrains.plugins.gradle")
         bundledPlugin("Git4Idea")
+        bundledPlugin("org.jetbrains.plugins.github")
         bundledPlugin("com.intellij.mcpServer")
     }
 

@@ -10,7 +10,13 @@
     <depends>com.intellij.gradle</depends>
     <depends>org.jetbrains.plugins.gradle</depends>
     <depends optional="true" config-file="git4idea-integration.xml">Git4Idea</depends>
+    <depends optional="true" config-file="github-integration.xml">org.jetbrains.plugins.github</depends>
     <depends optional="true" config-file="mcp.xml">com.intellij.mcpServer</depends>
+
+    <extensionPoints>
+        <extensionPoint name="githubPullRequestSource"
+                        interface="org.jetbrains.kotlin.test.helper.github.GitHubPullRequestSource"/>
+    </extensionPoints>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
