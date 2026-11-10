@@ -2,9 +2,13 @@ package org.jetbrains.kotlin.test.helper.teamcity
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import javax.swing.JTree
+import javax.swing.SwingUtilities
 import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
 
 class RemoteRunBranchTreeTest {
@@ -61,6 +65,105 @@ class RemoteRunBranchTreeTest {
         assertEquals(BranchRunIndicator.SUCCESS, branchRunIndicator(build(), status(BuildState.FINISHED, true), false))
         assertEquals(BranchRunIndicator.FAILURE, branchRunIndicator(build(), status(BuildState.FINISHED, false), false))
         assertEquals(BranchRunIndicator.FAILURE, branchRunIndicator(build(), status(BuildState.FINISHED, null), false))
+    }
+
+    @Test
+    fun branchesStartCollapsedAndNewBranchesStayCollapsedAfterRefresh() = onEdt {
+        val fixture = branchExpansionFixture()
+
+        fixture.rebuild(listOf("master", "feature"))
+
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("master")))
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("feature")))
+
+        fixture.tree.expandPath(fixture.branchPath("feature"))
+        fixture.rebuild(listOf("master", "feature", "new"))
+
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("master")))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("new")))
+    }
+
+    @Test
+    fun branchExpansionSurvivesFilteringAndClearingTheFilter() = onEdt {
+        val fixture = branchExpansionFixture()
+        fixture.rebuild(listOf("master", "feature"))
+        fixture.tree.expandPath(fixture.branchPath("feature"))
+
+        fixture.rebuild(listOf("master"))
+        assertTrue(fixture.expansionState.isExpanded("feature"))
+
+        fixture.rebuild(listOf("master", "feature"))
+
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("master")))
+    }
+
+    @Test
+    fun nestedExpansionDoesNotReopenCollapsedBranchAfterRebuild() = onEdt {
+        val fixture = branchExpansionFixture()
+        fixture.rebuild(listOf("feature"))
+        fixture.tree.expandPath(fixture.branchPath("feature"))
+        fixture.tree.expandPath(fixture.buildPath("feature"))
+        fixture.tree.collapsePath(fixture.branchPath("feature"))
+
+        fixture.rebuild(listOf("feature"), restoreNestedPathsFor = setOf("feature"))
+
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertFalse(fixture.tree.isExpanded(fixture.buildPath("feature")))
+    }
+
+    @Test
+    fun toolbarOperationsAffectDisplayedBranchesAndSurviveRebuilds() = onEdt {
+        val fixture = branchExpansionFixture()
+        val allBranchNames = listOf("master", "feature", "hidden")
+        fixture.rebuild(allBranchNames)
+        fixture.tree.expandPath(fixture.branchPath("hidden"))
+
+        fixture.expansionState.expandBranches(fixture.branchPaths(listOf("master", "feature")))
+
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("master")))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertFalse(fixture.tree.isExpanded(fixture.buildPath("master")))
+        assertFalse(fixture.tree.isExpanded(fixture.buildPath("feature")))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("hidden")))
+
+        fixture.rebuild(listOf("master", "feature"))
+        fixture.expansionState.collapseBranches(fixture.branchPaths(listOf("master", "feature")))
+
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("master")))
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertTrue(fixture.expansionState.isExpanded("hidden"))
+
+        fixture.rebuild(allBranchNames)
+
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("master")))
+        assertFalse(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("hidden")))
+
+        fixture.expansionState.expandBranches(fixture.branchPaths(listOf("master", "feature")))
+        fixture.rebuild(allBranchNames)
+
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("master")))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("feature")))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("hidden")))
+        assertFalse(fixture.tree.isExpanded(fixture.buildPath("master")))
+        assertFalse(fixture.tree.isExpanded(fixture.buildPath("feature")))
+    }
+
+    @Test
+    fun toolbarOperationsAreSafeWhenNoBranchesAreDisplayed() = onEdt {
+        val fixture = branchExpansionFixture()
+        fixture.rebuild(listOf("hidden"))
+        fixture.tree.expandPath(fixture.branchPath("hidden"))
+        fixture.rebuild(emptyList())
+
+        fixture.expansionState.expandBranches(fixture.branchPaths(emptyList()))
+        fixture.expansionState.collapseBranches(fixture.branchPaths(emptyList()))
+
+        assertTrue(fixture.expansionState.isExpanded("hidden"))
+        fixture.rebuild(listOf("hidden"))
+        assertTrue(fixture.tree.isExpanded(fixture.branchPath("hidden")))
     }
 
     @Test
@@ -137,6 +240,80 @@ class RemoteRunBranchTreeTest {
         tree.setSize(300, 120)
 
         return TreeFixture(tree, branchPath, buildPath, lastBranchPath)
+    }
+
+    private fun branchExpansionFixture(): BranchExpansionFixture = BranchExpansionFixture()
+
+    private class BranchExpansionFixture {
+        val tree: JTree
+        val expansionState: RemoteRunBranchExpansionState
+        private val model: DefaultTreeModel
+
+        init {
+            val root = DefaultMutableTreeNode("root")
+            model = DefaultTreeModel(root)
+            tree = JTree(model).apply { isRootVisible = false }
+            expansionState = RemoteRunBranchExpansionState(tree) { path ->
+                (path.lastPathComponent as? TestBranchNode)?.branchName
+            }
+        }
+
+        fun rebuild(branchNames: List<String>, restoreNestedPathsFor: Set<String> = emptySet()) {
+            expansionState.restoreAfterRebuild {
+                val root = DefaultMutableTreeNode("root")
+                val branches = branchNames.map { branchName ->
+                    val branch = TestBranchNode(branchName)
+                    val build = DefaultMutableTreeNode("build")
+                    build.add(DefaultMutableTreeNode("test class"))
+                    branch.add(build)
+                    root.add(branch)
+                    branch to build
+                }
+                model.setRoot(root)
+                tree.expandPath(TreePath(root.path))
+
+                branches.map { (branch, build) ->
+                    RemoteRunBranchTreePaths(
+                        branchName = branch.branchName,
+                        branchPath = TreePath(branch.path),
+                        nestedPaths = if (branch.branchName in restoreNestedPathsFor) {
+                            listOf(TreePath(build.path))
+                        } else {
+                            emptyList()
+                        },
+                    )
+                }
+            }
+        }
+
+        fun branchPath(branchName: String): TreePath {
+            val root = model.root as DefaultMutableTreeNode
+            val branch = root.children().toList().filterIsInstance<TestBranchNode>()
+                .first { node -> node.branchName == branchName }
+            return TreePath(branch.path)
+        }
+
+        fun branchPaths(branchNames: List<String>): List<RemoteRunBranchTreePaths> =
+            branchNames.map { branchName ->
+                RemoteRunBranchTreePaths(
+                    branchName = branchName,
+                    branchPath = branchPath(branchName),
+                )
+            }
+
+        fun buildPath(branchName: String): TreePath {
+            val branch = branchPath(branchName).lastPathComponent as TestBranchNode
+            val build = branch.children().toList().first() as DefaultMutableTreeNode
+            return TreePath(build.path)
+        }
+    }
+
+    private class TestBranchNode(val branchName: String) : DefaultMutableTreeNode(branchName) {
+        override fun isLeaf(): Boolean = false
+    }
+
+    private fun onEdt(action: () -> Unit) {
+        SwingUtilities.invokeAndWait { action() }
     }
 
     private data class TreeFixture(

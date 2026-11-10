@@ -14,6 +14,9 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
 - **Launch Test Run** (toolbar) always runs the checked out branch. Right-click a branch to run another one.
 - All local branches are listed: the current branch first, then branches by their latest run, then the rest by name.
   The search field filters them like the Git branches popup.
+- Branches start collapsed. Use **Expand All Branches** or **Collapse All Branches** in the toolbar to change the
+  currently displayed branch rows; these controls do not expand or collapse build and failed-test rows. Individual
+  branch expansion choices are retained across refreshes and filtering for the tool window session.
 - Besides the runs launched from the IDE, the newest aggregate TeamCity builds of the 10 most recently checked out
   branches are shown; they are fetched on every refresh and kept in memory only. Builds of other branches are
   fetched on demand and then stay listed like the automatically fetched ones.

@@ -66,6 +66,8 @@ import javax.swing.JTree
 import javax.swing.Timer
 import javax.swing.ToolTipManager
 import javax.swing.event.DocumentEvent
+import javax.swing.event.TreeExpansionEvent
+import javax.swing.event.TreeExpansionListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
@@ -270,6 +272,75 @@ internal fun mergeRememberedAndFetchedBuilds(
     return remembered + fetched.filterNot { build -> build.buildId in rememberedBuildIds }
 }
 
+internal data class RemoteRunBranchTreePaths(
+    val branchName: String,
+    val branchPath: TreePath,
+    val nestedPaths: List<TreePath> = emptyList(),
+)
+
+internal class RemoteRunBranchExpansionState(
+    private val tree: JTree,
+    private val branchNameForPath: (TreePath) -> String?,
+) {
+    private val expandedBranchNames = mutableSetOf<String>()
+    private var isRestoringTree = false
+
+    init {
+        tree.addTreeExpansionListener(object : TreeExpansionListener {
+            override fun treeExpanded(event: TreeExpansionEvent) {
+                if (!isRestoringTree) branchNameForPath(event.path)?.let { branchName ->
+                    setExpanded(branchName, true)
+                }
+            }
+
+            override fun treeCollapsed(event: TreeExpansionEvent) {
+                if (!isRestoringTree) branchNameForPath(event.path)?.let { branchName ->
+                    setExpanded(branchName, false)
+                }
+            }
+        })
+    }
+
+    fun isExpanded(branchName: String): Boolean = branchName in expandedBranchNames
+
+    fun setExpanded(branchName: String, isExpanded: Boolean) {
+        if (isExpanded) expandedBranchNames.add(branchName) else expandedBranchNames.remove(branchName)
+    }
+
+    fun expandBranches(branches: List<RemoteRunBranchTreePaths>) {
+        setBranchesExpanded(branches, isExpanded = true)
+    }
+
+    fun collapseBranches(branches: List<RemoteRunBranchTreePaths>) {
+        setBranchesExpanded(branches, isExpanded = false)
+    }
+
+    private fun setBranchesExpanded(branches: List<RemoteRunBranchTreePaths>, isExpanded: Boolean) {
+        val root = tree.model.root as DefaultMutableTreeNode
+        tree.expandPath(TreePath(root.path))
+
+        branches.forEach { branchPaths ->
+            setExpanded(branchPaths.branchName, isExpanded)
+            if (isExpanded) tree.expandPath(branchPaths.branchPath) else tree.collapsePath(branchPaths.branchPath)
+        }
+    }
+
+    fun restoreAfterRebuild(rebuild: () -> List<RemoteRunBranchTreePaths>) {
+        val wasRestoringTree = isRestoringTree
+        isRestoringTree = true
+        try {
+            rebuild().forEach { branchPaths ->
+                if (!isExpanded(branchPaths.branchName)) return@forEach
+
+                tree.expandPath(branchPaths.branchPath)
+                branchPaths.nestedPaths.forEach(tree::expandPath)
+            }
+        } finally {
+            isRestoringTree = wasRestoringTree
+        }
+    }
+}
+
 /**
  * The Remote Run tool window body: all local branches and their TeamCity builds grouped by branch —
  * remembered launches plus the aggregate builds fetched for the branches — with the currently checked
@@ -287,6 +358,9 @@ private class RemoteRunToolWindowPanel(
 
     private val treeModel = DefaultTreeModel(DefaultMutableTreeNode("Remote Run"))
     private val tree = Tree(treeModel)
+    private val branchExpansionState = RemoteRunBranchExpansionState(tree) { path ->
+        (path.lastPathComponent as? BranchNode)?.branchName
+    }
     private val searchField = SearchTextField(false)
     private val elapsedTimeTimer = Timer(1_000) { tree.repaint() }
     private val fetchStatusLabel = JBLabel()
@@ -423,11 +497,37 @@ private class RemoteRunToolWindowPanel(
         val actionGroup = DefaultActionGroup(
             LaunchTestRunAction(),
             RefreshStatusesAction(),
+            ExpandAllBranchesAction(),
+            CollapseAllBranchesAction(),
         )
 
         val actionToolbar = ActionManager.getInstance().createActionToolbar("RemoteRunToolbar", actionGroup, true)
         actionToolbar.targetComponent = this
         return actionToolbar
+    }
+
+    private inner class ExpandAllBranchesAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.expand.all.text"),
+        MyBundle.message("teamcity.toolwindow.expand.all.description"),
+        AllIcons.Actions.Expandall,
+    ) {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        override fun actionPerformed(e: AnActionEvent) {
+            branchExpansionState.expandBranches(branchTreePaths())
+        }
+    }
+
+    private inner class CollapseAllBranchesAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.collapse.all.text"),
+        MyBundle.message("teamcity.toolwindow.collapse.all.description"),
+        AllIcons.Actions.Collapseall,
+    ) {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        override fun actionPerformed(e: AnActionEvent) {
+            branchExpansionState.collapseBranches(branchTreePaths())
+        }
     }
 
     private fun scheduleFetchUiUpdate() {
@@ -511,10 +611,6 @@ private class RemoteRunToolWindowPanel(
         val selectedBranchName = selectedBranchName()
         val selectedFailedTest = selectedFailedTest()?.let { node -> node.build.buildId to node.test }
         val selectedFailedTestClass = selectedFailedTestClass()?.let { node -> node.build.buildId to node.classFqName }
-        val collapsedBranchNames = branchNodes()
-            .filter { branchNode -> tree.isCollapsed(TreePath(branchNode.path)) }
-            .map { branchNode -> branchNode.branchName }
-            .toSet()
         val expandedBuildIds = branchNodes().flatMap { branchNode ->
             branchNode.children().toList().filterIsInstance<BuildNode>()
                 .filter { buildNode -> tree.isExpanded(TreePath(buildNode.path)) }
@@ -528,17 +624,28 @@ private class RemoteRunToolWindowPanel(
             }
         }.toSet()
 
-        treeModel.setRoot(createRootNode(content))
+        branchExpansionState.restoreAfterRebuild {
+            treeModel.setRoot(createRootNode(content))
+            val root = treeModel.root as DefaultMutableTreeNode
+            tree.expandPath(TreePath(root.path))
 
-        for (branchNode in branchNodes()) {
-            if (branchNode.branchName !in collapsedBranchNames) tree.expandPath(TreePath(branchNode.path))
-            branchNode.children().toList().filterIsInstance<BuildNode>()
-                .forEach { buildNode ->
-                    if (buildNode.build.buildId in expandedBuildIds) tree.expandPath(TreePath(buildNode.path))
-                    buildNode.children().toList().filterIsInstance<FailedTestClassNode>()
+            branchNodes().map { branchNode ->
+                val nestedPaths = branchNode.children().toList().filterIsInstance<BuildNode>().flatMap { buildNode ->
+                    val expandedClassPaths = buildNode.children().toList().filterIsInstance<FailedTestClassNode>()
                         .filter { classNode -> (buildNode.build.buildId to classNode.classFqName) in expandedFailedTestClasses }
-                        .forEach { classNode -> tree.expandPath(TreePath(classNode.path)) }
+                        .map { classNode -> TreePath(classNode.path) }
+                    val expandedBuildPath = TreePath(buildNode.path)
+                        .takeIf { buildNode.build.buildId in expandedBuildIds }
+
+                    expandedClassPaths + listOfNotNull(expandedBuildPath)
                 }
+
+                RemoteRunBranchTreePaths(
+                    branchName = branchNode.branchName,
+                    branchPath = TreePath(branchNode.path),
+                    nestedPaths = nestedPaths,
+                )
+            }
         }
 
         if (filterChanged) {
@@ -557,6 +664,14 @@ private class RemoteRunToolWindowPanel(
         val root = treeModel.root as DefaultMutableTreeNode
         return root.children().toList().filterIsInstance<BranchNode>()
     }
+
+    private fun branchTreePaths(): List<RemoteRunBranchTreePaths> =
+        branchNodes().map { branchNode ->
+            RemoteRunBranchTreePaths(
+                branchName = branchNode.branchName,
+                branchPath = TreePath(branchNode.path),
+            )
+        }
 
     private fun restoreSelection(
         selectedBuildId: String?,
