@@ -46,6 +46,8 @@ import org.jetbrains.kotlin.test.helper.git.Git
 import org.jetbrains.kotlin.test.helper.git.TeamCityRemoteChoice
 import org.jetbrains.kotlin.test.helper.git.currentBranchName
 import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
+import org.jetbrains.kotlin.test.helper.github.OpenKotlinPullRequestResult
+import org.jetbrains.kotlin.test.helper.github.findOpenKotlinPullRequest
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
@@ -100,6 +102,14 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
     val isLaunchInFlight: Boolean get() = launchInFlight.get()
 
     fun launchAggregateBuild(branchName: String?) {
+        launchBuild(branchName, isSafeMergeDryRun = false)
+    }
+
+    fun launchSafeMergeDryRun(branchName: String) {
+        launchBuild(branchName, isSafeMergeDryRun = true)
+    }
+
+    private fun launchBuild(branchName: String?, isSafeMergeDryRun: Boolean) {
         if (!launchInFlight.compareAndSet(false, true)) {
             logger.debug("Ignoring a TeamCity launch request; another launch is in flight")
             return
@@ -110,14 +120,24 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
 
         scope.launch {
             try {
-                withBackgroundProgress(project, MyBundle.message("teamcity.launch.progress.title"), cancellable = true) {
-                    launchAggregateBuildInternal(branchName, LaunchSteps(progressBranchName))
+                val progressTitle = if (isSafeMergeDryRun) {
+                    MyBundle.message("teamcity.launch.safe.merge.dry.run.progress.title")
+                } else {
+                    MyBundle.message("teamcity.launch.progress.title")
+                }
+                withBackgroundProgress(project, progressTitle, cancellable = true) {
+                    launchBuildInternal(branchName, LaunchSteps(progressBranchName), isSafeMergeDryRun)
                 }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                logger.warn("Launching the TeamCity test run failed", exception)
-                notifyLaunchError(MyBundle.message("teamcity.launch.unexpected.error", escapeHtml(exception.message.orEmpty())))
+                logger.warn("Launching the TeamCity build failed", exception)
+                val errorKey = if (isSafeMergeDryRun) {
+                    "teamcity.launch.safe.merge.dry.run.unexpected.error"
+                } else {
+                    "teamcity.launch.unexpected.error"
+                }
+                notifyLaunchError(MyBundle.message(errorKey, escapeHtml(exception.message.orEmpty())))
             } finally {
                 launchInFlight.set(false)
                 publishLaunchProgress(null)
@@ -139,7 +159,11 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
         }
     }
 
-    private suspend fun launchAggregateBuildInternal(requestedBranchName: String?, launchSteps: LaunchSteps) {
+    private suspend fun launchBuildInternal(
+        requestedBranchName: String?,
+        launchSteps: LaunchSteps,
+        isSafeMergeDryRun: Boolean,
+    ) {
         val repository = project.kotlinMonorepoRepository()
         if (repository == null) {
             notifyLaunchError(MyBundle.message("teamcity.launch.no.repository"))
@@ -167,6 +191,49 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
         launchSteps.step(MyBundle.message("teamcity.launch.step.push.state", branchName, remote.name))
         if (!ensureBranchIsPushed(repository, remote, branchName, launchSteps)) return
 
+        val pullRequest = if (isSafeMergeDryRun) {
+            launchSteps.step(MyBundle.message("teamcity.launch.step.pull.request"))
+            when (val result = findOpenKotlinPullRequest(branchName)) {
+                is OpenKotlinPullRequestResult.Found -> result.pullRequest
+                OpenKotlinPullRequestResult.NotFound -> {
+                    notifyLaunchError(
+                        MyBundle.message(
+                            "teamcity.launch.safe.merge.dry.run.no.pull.request",
+                            branchName
+                        )
+                    )
+                    return
+                }
+
+                OpenKotlinPullRequestResult.Ambiguous -> {
+                    notifyLaunchError(
+                        MyBundle.message(
+                            "teamcity.launch.safe.merge.dry.run.ambiguous.pull.request",
+                            branchName
+                        )
+                    )
+                    return
+                }
+
+                OpenKotlinPullRequestResult.InvalidResponse -> {
+                    notifyLaunchError(MyBundle.message("teamcity.launch.safe.merge.dry.run.invalid.pull.request.response"))
+                    return
+                }
+
+                is OpenKotlinPullRequestResult.Failed -> {
+                    notifyLaunchError(
+                        MyBundle.message(
+                            "teamcity.launch.safe.merge.dry.run.pull.request.lookup.failed",
+                            escapeHtml(result.message),
+                        ),
+                    )
+                    return
+                }
+            }
+        } else {
+            null
+        }
+
         launchSteps.step(MyBundle.message("teamcity.launch.step.cli"))
 
         val cliExecutable = findCliExecutable()
@@ -193,17 +260,38 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
             }
         }
 
-        launchSteps.step(MyBundle.message("teamcity.launch.step.trigger", branchName))
+        val buildTypeId = if (isSafeMergeDryRun) {
+            SAFE_MERGE_COORDINATOR_BUILD_TYPE_ID
+        } else {
+            AGGREGATE_TRIGGER_BUILD_TYPE_ID
+        }
+        val buildEnvironment = pullRequest?.let(::safeMergeDryRunEnvironment).orEmpty()
+        launchSteps.step(
+            if (isSafeMergeDryRun) {
+                MyBundle.message("teamcity.launch.step.safe.merge.dry.run.trigger", branchName)
+            } else {
+                MyBundle.message("teamcity.launch.step.trigger", branchName)
+            },
+        )
 
         val runResult = try {
             runInRunConsole(
-                commandLine = runStartCommandLine(cliExecutable.absolutePath, AGGREGATE_TRIGGER_BUILD_TYPE_ID, branchName, workingDirectory),
-                consoleTitle = MyBundle.message("teamcity.console.run.title", branchName),
+                commandLine = runStartCommandLine(
+                    cliExecutable.absolutePath,
+                    buildTypeId,
+                    branchName,
+                    workingDirectory,
+                    buildEnvironment,
+                ),
+                consoleTitle = MyBundle.message(
+                    if (isSafeMergeDryRun) "teamcity.console.safe.merge.dry.run.title" else "teamcity.console.run.title",
+                    branchName,
+                ),
                 inBackground = true,
             )
         } catch (exception: CancellationException) {
             /* The CLI is stopped, but it may have queued the build already. */
-            notifyCancelledWhileTriggering(branchName)
+            notifyCancelledWhileTriggering(branchName, buildTypeId, isSafeMergeDryRun)
             throw exception
         }
 
@@ -221,7 +309,7 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
         val launchedBuild = parseLaunchedBuild(runResult.stdout)
 
         if (launchedBuild == null) {
-            notifyLaunchSuccess(branchName, buildUrl = null)
+            notifyLaunchSuccess(branchName, buildUrl = null, isSafeMergeDryRun = isSafeMergeDryRun)
             return
         }
 
@@ -231,12 +319,18 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
                 webUrl = launchedBuild.webUrl,
                 branchName = branchName,
                 launchTimestamp = System.currentTimeMillis(),
-                isAggregateTrigger = true,
+                isAggregateTrigger = !isSafeMergeDryRun,
+                isSafeMerge = isSafeMergeDryRun,
+                isSafeMergeDryRun = isSafeMergeDryRun,
             ),
         )
-        TeamCityBuildStatusService.getInstance(project).requestRefresh()
+        if (isSafeMergeDryRun) {
+            statusService.requestBranchRefresh(branchName)
+        } else {
+            statusService.requestRefresh()
+        }
 
-        notifyLaunchSuccess(branchName, launchedBuild.webUrl)
+        notifyLaunchSuccess(branchName, launchedBuild.webUrl, isSafeMergeDryRun)
     }
 
     fun stopBuilds(builds: List<RememberedTeamCityBuild>) {
@@ -551,32 +645,47 @@ internal class TeamCityTestLaunchService(private val project: Project, private v
         processHandler.destroyProcess()
     }
 
-    private fun notifyCancelledWhileTriggering(branchName: String) {
+    private fun notifyCancelledWhileTriggering(branchName: String, buildTypeId: String, isSafeMergeDryRun: Boolean) {
         if (project.isDisposed) return
 
+        val content = if (isSafeMergeDryRun) {
+            MyBundle.message("teamcity.launch.safe.merge.dry.run.cancelled.while.triggering", branchName)
+        } else {
+            MyBundle.message("teamcity.launch.cancelled.while.triggering", branchName)
+        }
         val notification = createLaunchNotification(
-            MyBundle.message("teamcity.launch.cancelled.while.triggering", branchName),
+            content,
             NotificationType.INFORMATION,
             title = MyBundle.message("teamcity.notification.cancelled.title"),
         )
 
         notification.addAction(object : AnAction(MyBundle.message("teamcity.launch.open.build.configuration")) {
             override fun actionPerformed(e: AnActionEvent) {
-                BrowserUtil.browse(buildConfigurationUrl(AGGREGATE_TRIGGER_BUILD_TYPE_ID, branchName))
+                BrowserUtil.browse(buildConfigurationUrl(buildTypeId, branchName))
             }
         })
 
         notification.notify(project)
     }
 
-    private fun notifyLaunchSuccess(branchName: String, buildUrl: String?) {
-        val content = if (buildUrl == null) {
-            MyBundle.message("teamcity.launch.success.no.link", branchName)
+    private fun notifyLaunchSuccess(branchName: String, buildUrl: String?, isSafeMergeDryRun: Boolean) {
+        val content = when {
+            isSafeMergeDryRun && buildUrl == null -> MyBundle.message(
+                "teamcity.launch.safe.merge.dry.run.success.no.link",
+                branchName
+            )
+
+            isSafeMergeDryRun -> MyBundle.message("teamcity.launch.safe.merge.dry.run.success", branchName)
+            buildUrl == null -> MyBundle.message("teamcity.launch.success.no.link", branchName)
+            else -> MyBundle.message("teamcity.launch.success", branchName)
+        }
+        val notificationTitle = if (isSafeMergeDryRun) {
+            MyBundle.message("teamcity.notification.safe.merge.dry.run.success.title")
         } else {
-            MyBundle.message("teamcity.launch.success", branchName)
+            MyBundle.message("teamcity.notification.success.title")
         }
 
-        val notification = createLaunchNotification(content, NotificationType.INFORMATION)
+        val notification = createLaunchNotification(content, NotificationType.INFORMATION, notificationTitle)
 
         if (buildUrl != null) {
             notification.addAction(object : AnAction(MyBundle.message("teamcity.launch.open.in.teamcity")) {

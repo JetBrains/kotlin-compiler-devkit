@@ -5,6 +5,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.intellij.openapi.actionSystem.Presentation
+import com.intellij.util.ui.JBUI
+import javax.swing.ImageIcon
+import javax.swing.JComponent
+import javax.swing.JLabel
 import javax.swing.JTree
 import javax.swing.SwingUtilities
 import javax.swing.tree.DefaultMutableTreeNode
@@ -13,6 +18,53 @@ import javax.swing.tree.TreePath
 
 class RemoteRunBranchTreeTest {
     private val branches = listOf("master", "sellmair/fed/test-2", "rr/sellmair/KT-123", "backup/old")
+
+    @Test
+    fun pullRequestBadgeHasSpaceAfterCurrentBranchMarker() = onEdt {
+        val githubIcon = ImageIcon()
+        val pullRequestIcon = ImageIcon()
+        val renderer = RemoteRunBranchCellRenderer(pullRequestIcon = githubIcon, pullRequestStatusIcon = pullRequestIcon)
+
+        val markedRow = renderer.render(JLabel("branch"), true, "current", null, null)
+        val markedBadge = markedRow.getComponent(2) as JComponent
+        val markedBadgeLeftInset = markedBadge.border?.getBorderInsets(markedBadge)?.left ?: 0
+
+        assertEquals(JBUI.scale(4), markedBadgeLeftInset)
+        assertEquals(4, markedRow.componentCount)
+        assertEquals(githubIcon, (markedRow.getComponent(2) as JLabel).icon)
+        assertEquals(pullRequestIcon, (markedRow.getComponent(3) as JLabel).icon)
+        val statusBadge = markedRow.getComponent(3) as JComponent
+        assertEquals(JBUI.scale(2), statusBadge.border.getBorderInsets(statusBadge).left)
+
+        val unmarkedRow = renderer.render(JLabel("branch"), true, null, null, null)
+        val unmarkedBadge = unmarkedRow.getComponent(1) as JComponent
+        val unmarkedBadgeLeftInset = unmarkedBadge.border?.getBorderInsets(unmarkedBadge)?.left ?: 0
+
+        assertEquals(0, unmarkedBadgeLeftInset)
+        assertEquals(3, unmarkedRow.componentCount)
+
+        val rowWithoutPullRequest = renderer.render(JLabel("branch"), false, null, null, null)
+        assertEquals(1, rowWithoutPullRequest.componentCount)
+    }
+
+    @Test
+    fun launchActionLabelsIncludeBranchNamesWithoutParsingMnemonics() = onEdt {
+        val branchName = "feature/<release>&_draft"
+        val suffix = "for '$branchName'"
+        val aggregateText = aggregateBranchActionText(branchName)
+        val safeMergeText = safeMergeDryRunBranchActionText(branchName)
+
+        assertEquals("Launch: Aggregate (master) $suffix", aggregateText)
+        assertEquals("Launch: Safe Merge Dry Run (Rebase) $suffix", safeMergeText)
+        assertEquals("Launch: Aggregate (master)", aggregateBranchActionText(null))
+        assertEquals("Launch: Safe Merge Dry Run (Rebase)", safeMergeDryRunBranchActionText(null))
+
+        listOf(aggregateText, safeMergeText).forEach { text ->
+            val presentation = Presentation()
+            presentation.setText(text, false)
+            assertEquals(text, presentation.text)
+        }
+    }
 
     @Test
     fun blankFilterKeepsAllBranches() {

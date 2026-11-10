@@ -1,0 +1,5 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="org.jetbrains.kotlin.compiler.devkit">
+        <githubPullRequestSource implementation="org.jetbrains.kotlin.test.helper.github.DefaultGitHubPullRequestSource"/>
+    </extensions>
+</idea-plugin>
