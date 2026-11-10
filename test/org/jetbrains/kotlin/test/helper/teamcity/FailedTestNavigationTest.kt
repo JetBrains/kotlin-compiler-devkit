@@ -28,7 +28,33 @@ class FailedTestNavigationTest : BasePlatformTestCase() {
     }
 
     fun testMissingClassHasNoNavigationTarget() {
+        val test = FailedTest(
+            name = "testFails",
+            packageName = "org.example",
+            className = "MissingTest",
+            methodName = "testFails",
+            displayName = "testFails",
+            isMuted = false,
+            buildTypeName = null,
+        )
+
         assertNull(findFailedTestClass(project, "org.example.MissingTest"))
+        assertNull(findFailedTestTarget(project, test))
+    }
+
+    fun testMissingParsedClassNameHasNoNavigationTarget() {
+        val test = FailedTest(
+            name = null,
+            packageName = null,
+            className = null,
+            methodName = null,
+            displayName = "testFails",
+            isMuted = false,
+            buildTypeName = null,
+        )
+
+        assertNull(failedTestClassFqName(test))
+        assertNull(findFailedTestTarget(project, test))
     }
 
     private fun addSampleTestClass() =
