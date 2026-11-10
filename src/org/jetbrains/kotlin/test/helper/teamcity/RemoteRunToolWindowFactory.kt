@@ -353,7 +353,7 @@ private class RemoteRunToolWindowPanel(
             override fun onDoubleClick(event: MouseEvent): Boolean {
                 return when (val node = tree.selectionPath?.lastPathComponent) {
                     is FailedTestNode -> {
-                        navigateToTest(node.build, node.test)
+                        navigateToTest(node.test)
                         true
                     }
 
@@ -817,7 +817,7 @@ private class RemoteRunToolWindowPanel(
 
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestNode = selectedFailedTest() ?: return
-            navigateToTest(failedTestNode.build, failedTestNode.test)
+            navigateToTest(failedTestNode.test)
         }
     }
 
@@ -830,7 +830,7 @@ private class RemoteRunToolWindowPanel(
 
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestClassNode = selectedFailedTestClass() ?: return
-            navigateToClass(failedTestClassNode.build, failedTestClassNode.classFqName)
+            navigateToClass(failedTestClassNode.classFqName)
         }
     }
 
@@ -864,15 +864,15 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
-    private fun navigateToTest(build: RememberedTeamCityBuild, test: FailedTest) {
-        navigateToTarget(build) { findFailedTestTarget(project, test) }
+    private fun navigateToTest(test: FailedTest) {
+        navigateToTarget { findFailedTestTarget(project, test) }
     }
 
-    private fun navigateToClass(build: RememberedTeamCityBuild, classFqName: String) {
-        navigateToTarget(build) { findFailedTestClass(project, classFqName) }
+    private fun navigateToClass(classFqName: String) {
+        navigateToTarget { findFailedTestClass(project, classFqName) }
     }
 
-    private fun navigateToTarget(build: RememberedTeamCityBuild, findTarget: () -> NavigatablePsiElement?) {
+    private fun navigateToTarget(findTarget: () -> NavigatablePsiElement?) {
         val modalityState = ModalityState.current()
         navigationScope.launch(modalityState.asContextElement()) {
             val targetPointer = smartReadAction(project) {
@@ -883,11 +883,7 @@ private class RemoteRunToolWindowPanel(
 
             withContext(Dispatchers.EDT) {
                 val target = targetPointer?.element
-                if (target == null) {
-                    BrowserUtil.browse(build.webUrl)
-                } else {
-                    target.navigate(true)
-                }
+                target?.navigate(true)
             }
         }
     }

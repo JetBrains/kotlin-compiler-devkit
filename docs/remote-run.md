@@ -22,10 +22,10 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   a gate is launched, the coordinator build itself is shown with its failure.
 - A branch with a known run shows the latest status instead of the branch icon (spinner, success or failure).
 - Build rows show test counts and, while scheduling or running, the elapsed time.
-- Expand a failed build to list its failed tests; double-click a test to open it in the editor. The failed-test
-  context menu only offers "Navigate to Test".
-- Double-click a build to open it on TeamCity. The build context menu offers stopping unfinished builds, opening
-  the build on TeamCity and removing remembered launches from the list.
+- Expand a failed build to list its failed tests; double-click a test or use its context menu's "Navigate to Test"
+  action to open it in the editor when its source is found. If the source cannot be found, no navigation occurs.
+- The build context menu offers stopping unfinished builds, opening the build on TeamCity and removing remembered
+  launches from the list. Use "Open in TeamCity" to open a build in the browser.
 - The branch context menu offers launching the branch and "Refresh Branch", which fetches its aggregate builds and
   safe merges on demand; branches outside the recently checked out ones are fetched only that way.
 
@@ -86,7 +86,8 @@ All code lives in `src/org/jetbrains/kotlin/test/helper/teamcity` and `.../helpe
 - Test counts come from the build's `testOccurrences` field. For builds with failures, the failed occurrences
   (at most 200) are fetched once per change of the failure count and cached.
 - Navigation uses the parsed test name from TeamCity (package, class, method) to find the class with `JavaPsiFacade`,
-  then the method by name. If nothing is found, the build opens on TeamCity.
+  then the method by name. If the class is found but the method is not, navigation opens the class; if the class is
+  not found, navigation does nothing.
 
 ## Tests
 
