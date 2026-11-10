@@ -11,8 +11,10 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.asContextElement
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.ui.MessageDialogBuilder
@@ -24,6 +26,7 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.psi.NavigatablePsiElement
+import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.codeStyle.MinusculeMatcher
 import com.intellij.psi.codeStyle.NameUtil
 import com.intellij.util.text.DateFormatUtil
@@ -44,6 +47,12 @@ import com.intellij.util.ui.UIUtil
 import com.intellij.xml.util.XmlStringUtil
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.MyBundle
 import org.jetbrains.kotlin.test.helper.git.currentBranchName
 import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
@@ -274,6 +283,8 @@ private class RemoteRunToolWindowPanel(
     private val toolWindow: ToolWindow,
 ) : SimpleToolWindowPanel(false, true), Disposable {
 
+    private val navigationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     private val treeModel = DefaultTreeModel(DefaultMutableTreeNode("Remote Run"))
     private val tree = Tree(treeModel)
     private val searchField = SearchTextField(false)
@@ -392,6 +403,7 @@ private class RemoteRunToolWindowPanel(
     }
 
     override fun dispose() {
+        navigationScope.cancel()
         elapsedTimeTimer.stop()
         project.getServiceIfCreated(TeamCityBuildStatusService::class.java)?.setPollingActive(false)
     }
@@ -853,27 +865,29 @@ private class RemoteRunToolWindowPanel(
     }
 
     private fun navigateToTest(build: RememberedTeamCityBuild, test: FailedTest) {
-        DumbService.getInstance(project).runWhenSmart {
-            val target = ReadAction.compute<NavigatablePsiElement?, RuntimeException> {
-                findFailedTestTarget(project, test)
-            }
-            if (target == null) {
-                BrowserUtil.browse(build.webUrl)
-            } else {
-                target.navigate(true)
-            }
-        }
+        navigateToTarget(build) { findFailedTestTarget(project, test) }
     }
 
     private fun navigateToClass(build: RememberedTeamCityBuild, classFqName: String) {
-        DumbService.getInstance(project).runWhenSmart {
-            val target = ReadAction.compute<NavigatablePsiElement?, RuntimeException> {
-                findFailedTestClass(project, classFqName)
+        navigateToTarget(build) { findFailedTestClass(project, classFqName) }
+    }
+
+    private fun navigateToTarget(build: RememberedTeamCityBuild, findTarget: () -> NavigatablePsiElement?) {
+        val modalityState = ModalityState.current()
+        navigationScope.launch(modalityState.asContextElement()) {
+            val targetPointer = smartReadAction(project) {
+                findTarget()?.let { target ->
+                    SmartPointerManager.getInstance(project).createSmartPsiElementPointer(target)
+                }
             }
-            if (target == null) {
-                BrowserUtil.browse(build.webUrl)
-            } else {
-                target.navigate(true)
+
+            withContext(Dispatchers.EDT) {
+                val target = targetPointer?.element
+                if (target == null) {
+                    BrowserUtil.browse(build.webUrl)
+                } else {
+                    target.navigate(true)
+                }
             }
         }
     }
