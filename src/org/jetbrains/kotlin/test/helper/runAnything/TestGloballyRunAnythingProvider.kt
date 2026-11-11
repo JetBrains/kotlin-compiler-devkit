@@ -11,10 +11,13 @@ import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.test.helper.actions.TestDescription
 import org.jetbrains.kotlin.test.helper.gradle.computeGradleCommandLine
 import org.jetbrains.kotlin.test.helper.toast
+import org.jetbrains.kotlin.utils.addToStdlib.partitionNotNull
 import org.jetbrains.plugins.gradle.action.GradleExecuteTaskAction
 import java.awt.Component
 import javax.swing.JWindow
@@ -98,26 +101,31 @@ internal fun findAndLaunchTestsByFqReferences(
     val javaPsiFacade = JavaPsiFacade.getInstance(project)
     val globalSearchScope = GlobalSearchScope.allScope(project)
 
-    val methods = tests
-        .mapNotNull { filter ->
-            val parts = filter.replace("$", ".").split(".")
-            javaPsiFacade.findClass(parts.dropLast(1).joinToString(separator = "."), globalSearchScope)
-                ?.methods?.find { it.name == parts.last() }
-        }
-        .filter { it.hasAnnotation("org.jetbrains.kotlin.test.TestMetadata") }
-        .map { TestDescription.ExistingTest(it) }
+    val (allMethods, allNonMethods) = tests.partitionNotNull { lookupMethod(it, javaPsiFacade, globalSearchScope) }
+    val methods = allMethods.filter { it.hasAnnotation("org.jetbrains.kotlin.test.TestMetadata") }
+    val classes = allNonMethods.mapNotNull { lookupClass(it, javaPsiFacade, globalSearchScope) }
+    val declarations = (methods + classes).map { TestDescription.ExistingTest(it) }
 
-    if (methods.isEmpty()) {
-        project.toast("None of the ${tests.size} test methods were found in the current checkout", MessageType.ERROR)
+    if (declarations.isEmpty()) {
+        project.toast("None of the ${tests.size} test declarations were found in the current checkout", MessageType.ERROR)
         return false
-    } else if (methods.size < tests.size) {
+    } else if (declarations.size < tests.size) {
         project.toast("Resolved ${methods.size} tests out of the requested ${tests.size}", MessageType.WARNING)
     }
 
-    val gradleCommand = computeGradleCommandLine(methods)
+    val gradleCommand = computeGradleCommandLine(declarations)
     GradleExecuteTaskAction.runGradle(project, executor, workingDirectory, gradleCommand)
     return true
 }
+
+private fun lookupMethod(fqReference: String, facade: JavaPsiFacade, globalSearchScope: GlobalSearchScope): PsiMethod? {
+    val parts = fqReference.replace("$", ".").split(".")
+    return facade.findClass(parts.dropLast(1).joinToString(separator = "."), globalSearchScope)
+        ?.methods?.find { it.name == parts.last() }
+}
+
+private fun lookupClass(fqReference: String, facade: JavaPsiFacade, globalSearchScope: GlobalSearchScope): PsiClass? =
+    facade.findClass(fqReference.replace("$", "."), globalSearchScope)
 
 private fun String.removeQuotesIfNeeded(): String {
     val firstIndex = if (firstOrNull() in QUOTES) 1 else 0
