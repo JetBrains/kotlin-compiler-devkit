@@ -1,16 +1,20 @@
 package org.jetbrains.kotlin.test.helper.runAnything
 
+import com.intellij.execution.Executor
 import com.intellij.ide.actions.runAnything.RunAnythingAction.EXECUTOR_KEY
 import com.intellij.ide.actions.runAnything.RunAnythingUtil
 import com.intellij.ide.actions.runAnything.activity.RunAnythingCommandLineProvider
+import com.intellij.ide.actions.runAnything.activity.RunAnythingCommandLineProvider.CommandLine
 import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.test.helper.actions.TestDescription
 import org.jetbrains.kotlin.test.helper.gradle.computeGradleCommandLine
+import org.jetbrains.kotlin.test.helper.toast
 import org.jetbrains.plugins.gradle.action.GradleExecuteTaskAction
 import java.awt.Component
 import javax.swing.JWindow
@@ -51,21 +55,6 @@ class TestGloballyRunAnythingProvider : RunAnythingCommandLineProvider() {
         }
     }
 
-    private fun String.suggests(another: String): Boolean =
-        isNotEmpty() && another.startsWith(this) && another != this
-
-    private val List<String>.isCorrectParametersList: Boolean
-        get() = withIndex().all { (index, value) -> index.isOdd || value == TESTS }
-
-    private val CommandLine.isCorrectSoFar: Boolean
-        get() = completedParameters.isCorrectParametersList
-
-    private val CommandLine.isCorrectCompletely: Boolean
-        get() = parameters.isCorrectParametersList && parameters.size.isEven
-
-    private val Int.isEven get() = this and 1 == 0
-    private val Int.isOdd get() = !isEven
-
     override fun run(dataContext: DataContext, commandLine: CommandLine): Boolean {
         val project = RunAnythingUtil.fetchProject(dataContext)
 
@@ -73,70 +62,101 @@ class TestGloballyRunAnythingProvider : RunAnythingCommandLineProvider() {
             return failure("This is not a valid `$COMMAND` call", project)
         }
 
-        val workingDirectory = project.basePath
-            ?: return failure("Failed to get the project base path and set up the working directory", project)
-
         val testFiltersFqNames = commandLine.parameters
             .filterIndexed { index, _ -> index.isOdd }
             .map { it.removeQuotesIfNeeded().removeJUnitDisplayNameIfNeeded() }
 
-        val javaPsiFacade = JavaPsiFacade.getInstance(project)
-        val globalSearchScope = GlobalSearchScope.allScope(project)
+        val workingDirectory = project.basePath
+            ?: return failure("Failed to get the project base path and set up the working directory", project)
 
-        val methods = testFiltersFqNames
-            .mapNotNull { filter ->
-                val parts = filter.replace("$", ".").split(".")
-                javaPsiFacade.findClass(parts.dropLast(1).joinToString(separator = "."), globalSearchScope)
-                    ?.methods?.find { it.name == parts.last() }
-            }
-            .filter { it.hasAnnotation("org.jetbrains.kotlin.test.TestMetadata") }
-            .map { TestDescription.ExistingTest(it) }
-
-        val executor = EXECUTOR_KEY.getData(dataContext)
-        val gradleCommand = computeGradleCommandLine(methods)
-        GradleExecuteTaskAction.runGradle(project, executor, workingDirectory, gradleCommand)
+        findAndLaunchTestsByFqReferences(testFiltersFqNames, workingDirectory, EXECUTOR_KEY.getData(dataContext), project)
         return true
     }
+}
 
-    private fun String.removeQuotesIfNeeded(): String {
-        val firstIndex = if (firstOrNull() in QUOTES) 1 else 0
-        val lastIndex = if (lastOrNull() in QUOTES) lastIndex else length
+private fun String.suggests(another: String): Boolean =
+    isNotEmpty() && another.startsWith(this) && another != this
 
-        return when {
-            firstIndex != 0 || lastIndex != length -> substring(firstIndex, lastIndex)
-            else -> this
+private val List<String>.isCorrectParametersList: Boolean
+    get() = withIndex().all { (index, value) -> index.isOdd || value == TESTS }
+
+private val CommandLine.isCorrectSoFar: Boolean
+    get() = completedParameters.isCorrectParametersList
+
+private val CommandLine.isCorrectCompletely: Boolean
+    get() = parameters.isCorrectParametersList && parameters.size.isEven
+
+private val Int.isEven get() = this and 1 == 0
+private val Int.isOdd get() = !isEven
+
+internal fun findAndLaunchTestsByFqReferences(
+    tests: List<String>,
+    workingDirectory: String,
+    executor: Executor?,
+    project: Project,
+): Boolean {
+    val javaPsiFacade = JavaPsiFacade.getInstance(project)
+    val globalSearchScope = GlobalSearchScope.allScope(project)
+
+    val methods = tests
+        .mapNotNull { filter ->
+            val parts = filter.replace("$", ".").split(".")
+            javaPsiFacade.findClass(parts.dropLast(1).joinToString(separator = "."), globalSearchScope)
+                ?.methods?.find { it.name == parts.last() }
         }
+        .filter { it.hasAnnotation("org.jetbrains.kotlin.test.TestMetadata") }
+        .map { TestDescription.ExistingTest(it) }
+
+    if (methods.isEmpty()) {
+        project.toast("None of the ${tests.size} test methods were found in the current checkout", MessageType.ERROR)
+        return false
+    } else if (methods.size < tests.size) {
+        project.toast("Resolved ${methods.size} tests out of the requested ${tests.size}", MessageType.WARNING)
     }
 
-    /**
-     * A countermeasure for functions like: `my.package.path.MyTest.testSomething()(some random commend)`.
-     * Despite `@DisplayName` is a JUnit annotation, passing this to `--tests` will produce "No tests found
-     * for given includes".
-     */
-    private fun String.removeJUnitDisplayNameIfNeeded(): String {
-        val parenthesesIndex = indexOf('(')
+    val gradleCommand = computeGradleCommandLine(methods)
+    GradleExecuteTaskAction.runGradle(project, executor, workingDirectory, gradleCommand)
+    return true
+}
 
-        return when {
-            parenthesesIndex != -1 -> substring(0, parenthesesIndex)
-            else -> this
-        }
+private fun String.removeQuotesIfNeeded(): String {
+    val firstIndex = if (firstOrNull() in QUOTES) 1 else 0
+    val lastIndex = if (lastOrNull() in QUOTES) lastIndex else length
+
+    return when {
+        firstIndex != 0 || lastIndex != length -> substring(firstIndex, lastIndex)
+        else -> this
+    }
+}
+
+/**
+ * A countermeasure for functions like: `my.package.path.MyTest.testSomething()(some random commend)`.
+ * Despite `@DisplayName` is a JUnit annotation, passing this to `--tests` will produce "No tests found
+ * for given includes".
+ */
+private fun String.removeJUnitDisplayNameIfNeeded(): String {
+    val parenthesesIndex = indexOf('(')
+
+    return when {
+        parenthesesIndex != -1 -> substring(0, parenthesesIndex)
+        else -> this
+    }
+}
+
+private fun failure(error: String, project: Project) = false.also {
+    // There's a bug that the error dialog is partially covered with the
+    // Run Anything window, so you can't see it.
+    // Let's try closing it eagerly.
+    WindowManager.getInstance().getFocusedComponent(project)?.parentOfType<JWindow>()?.dispose()
+    Messages.showErrorDialog(error, "Could Not Run Command")
+}
+
+private inline fun <reified C> Component.parentOfType(): C? {
+    var result = parent
+
+    while (result !is C && result != null) {
+        result = result.parent
     }
 
-    private fun failure(error: String, project: Project) = false.also {
-        // There's a bug that the error dialog is partially covered with the
-        // Run Anything window, so you can't see it.
-        // Let's try closing it eagerly.
-        WindowManager.getInstance().getFocusedComponent(project)?.parentOfType<JWindow>()?.dispose()
-        Messages.showErrorDialog(error, "Could Not Run Command")
-    }
-
-    private inline fun <reified C> Component.parentOfType(): C? {
-        var result = parent
-
-        while (result !is C && result != null) {
-            result = result.parent
-        }
-
-        return result as? C
-    }
+    return result as? C
 }
