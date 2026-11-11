@@ -15,6 +15,7 @@
   GitHub plugin, at most once a minute. The GitHub requests — also of the safe-merge pull-request resolution —
   authenticate with the GitHub account configured in the IDE, which GitHub's GraphQL API effectively requires. See
   [docs/remote-run.md](docs/remote-run.md).
+- Add "Run Tests Locally" actions to the "Remote Run" tool window.
 
 ## 1.0.113
 - Migrate test data manager actions to the `checkTestData` / `updateTestData` Gradle tasks (options passed as `-P` properties). The removed `manageTestDataGlobally` task is no longer used.

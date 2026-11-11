@@ -41,6 +41,9 @@ internal fun failedTestsUrl(buildId: String): String =
         "?locator=build:(id:$buildId),status:FAILURE,count:$MAX_FAILED_TESTS" +
         "&fields=count,testOccurrence(name,muted,test(parsedTestName(testPackage,testClass,testMethodName,testNameWithParameters)),build(buildType(name)))"
 
+internal fun failedTestFqName(test: FailedTest): String? =
+    listOfNotNull(test.packageName, test.className, test.methodName).joinToString(".").takeIf { it.isNotBlank() }
+
 internal fun parseFailedTests(json: String): FailedTestsResult {
     val root = try {
         Json.parseToJsonElement(json) as? JsonObject ?: return FailedTestsResult(emptyList(), 0)
