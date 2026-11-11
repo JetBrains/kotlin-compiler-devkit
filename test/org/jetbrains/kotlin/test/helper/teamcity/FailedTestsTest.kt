@@ -15,6 +15,24 @@ class FailedTestsTest {
     }
 
     @Test
+    fun buildsFailedTestFqName() {
+        fun buildTest(p: String?, c: String?, m: String?) =
+            FailedTest(
+                name = null, p, c, m,
+                "Unknown test", isMuted = false, buildTypeName = null,
+            )
+
+        assertEquals(null, failedTestFqName(buildTest(null, null, null)))
+        assertEquals("a", failedTestFqName(buildTest("a", null, null)))
+        assertEquals("b", failedTestFqName(buildTest(null, "b", null)))
+        assertEquals("a.b", failedTestFqName(buildTest("a", "b", null)))
+        assertEquals("c", failedTestFqName(buildTest(null, null, "c")))
+        assertEquals("a.c", failedTestFqName(buildTest("a", null, "c")))
+        assertEquals("b.c", failedTestFqName(buildTest(null, "b", "c")))
+        assertEquals("a.b.c", failedTestFqName(buildTest("a", "b", "c")))
+    }
+
+    @Test
     fun parsesFailedTestNamesAndMutedBuildMetadata() {
         val result = parseFailedTests(
             """

@@ -30,8 +30,15 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
 - Build rows show test counts and, while scheduling or running, the elapsed time.
 - Expand a failed build to list its failed tests; double-click a test or use its context menu's "Navigate to Test"
   action to open it in the editor when its source is found. If the source cannot be found, no navigation occurs.
-- The build context menu offers stopping unfinished builds, opening the build on TeamCity and removing remembered
-  launches from the list. Use "Open in TeamCity" to open a build in the browser.
+  The test context menu can also "Run Test Locally"; a failed-test class row's context menu offers "Navigate to
+  Class" and "Run Failed Tests of This Class Locally".
+- The build context menu offers stopping unfinished builds, opening the build on TeamCity, removing remembered
+  launches from the list and "Run Failed Tests Locally" for all fetched failed tests of the build.
+- The "Run … Locally" actions re-run the selected failed tests with Gradle against the checked out working tree,
+  through the Run executor. A test is looked up by its TeamCity name (package, class, method) in the open project
+  and must exist there with a `@org.jetbrains.kotlin.test.TestMetadata` annotation to run; tests that cannot be
+  found in the checkout are skipped. Only the failed tests that were fetched (at most 200) can be re-run, and
+  muted tests are included. The run uses the same Gradle command as the `testGlobally` Run Anything action.
 - The branch context menu offers **Launch: Aggregate (master)** and **Launch: Safe Merge Dry Run (Rebase)** for the branch,
   and "Refresh Branch", which fetches its aggregate builds and safe merges on demand; branches outside the
   recently checked out ones are fetched only that way. Branches with unfinished launched safe merges keep being
@@ -126,6 +133,23 @@ fresh head SHA before starting anything and uses the same requests.
 - Navigation uses the parsed test name from TeamCity (package, class, method) to find the class with `JavaPsiFacade`,
   then the method by name. If the class is found but the method is not, navigation opens the class; if the class is
   not found, navigation does nothing.
+
+### Running failed tests locally
+
+The "Run … Locally" context-menu actions share the launcher of the `testGlobally` Run Anything command:
+
+1. The failed tests to run are collected: all fetched failed tests for a build row, the tests listed under a
+   failed-test class row, or the single selected test. Their TeamCity names (package, class, method) are turned
+   into fully qualified references (`FailedTests.kt` → `failedTestFqName`); if none can be built, a toast says so
+   and nothing runs.
+2. `findAndLaunchTestsByFqReferences` (`runAnything/TestGloballyRunAnythingProvider.kt`) looks each reference up
+   in the open project with `JavaPsiFacade`, keeps methods annotated `@org.jetbrains.kotlin.test.TestMetadata` and
+   maps them to Gradle test tasks with `--tests` filters (`gradle/computeGradleCommandLine.kt`); a single test runs
+   its test task alone, several tests clean and re-run their tasks with `--continue`.
+3. The command runs through `GradleExecuteTaskAction` in the project's base directory with the Run executor.
+
+Since the lookup happens in the open project, only tests present in the checked out working tree can be re-run —
+a failed build of another branch runs only the tests that branch shares with the checkout.
 
 ## Tests
 
