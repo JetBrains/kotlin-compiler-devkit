@@ -60,6 +60,7 @@ Use JetBrains MCP `get_run_configurations()` or these pre-configured options:
 | `reference/` | PSI references for test directives |
 | `inspections/` | Code inspections and intention actions |
 | `runAnything/` | "Run Anything" provider for `testGlobally` command |
+| `documentation/` | Quick documentation with severity badges for compiler diagnostics |
 
 ### Extension Points
 
@@ -70,6 +71,7 @@ The plugin registers extensions in `resources/META-INF/plugin.xml`:
 - `intentionAction` - Create contextual overload
 - `completion.contributor` - Directive completion
 - `psi.referenceContributor` - Directive references
+- `platform.backend.documentation.psiTargetProvider` - Quick documentation for compiler diagnostics
 
 ## JetBrains IDE MCP - MANDATORY for file and project operations
 

@@ -64,6 +64,11 @@
 
         <completion.contributor language="kotlin" implementationClass="org.jetbrains.kotlin.test.helper.completion.CommentDirectiveCompletionContributor"/>
 
+        <platform.backend.documentation.psiTargetProvider
+                id="KotlinCompilerDevKitDiagnosticSeverity"
+                order="first"
+                implementation="org.jetbrains.kotlin.test.helper.documentation.DiagnosticSeverityDocumentationTargetProvider"/>
+
         <executor implementation="org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsExecutor"/>
         <programRunner implementation="org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsProgramRunner"/>
 
