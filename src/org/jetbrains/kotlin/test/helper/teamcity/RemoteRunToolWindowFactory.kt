@@ -399,8 +399,6 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.expand.all.description"),
         AllIcons.Actions.Expandall,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             branchExpansionState.expandBranches(branchTreePaths())
         }
@@ -411,8 +409,6 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.collapse.all.description"),
         AllIcons.Actions.Collapseall,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             branchExpansionState.collapseBranches(branchTreePaths())
         }
@@ -847,8 +843,6 @@ private class RemoteRunToolWindowPanel(
         null,
         AllIcons.RunConfigurations.TestFailed,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestNode = selectedFailedTest() ?: return
             navigateToTest(failedTestNode.test)
@@ -860,8 +854,6 @@ private class RemoteRunToolWindowPanel(
         null,
         AllIcons.RunConfigurations.TestState.Red2,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestNode = selectedFailedTest() ?: return
             listOf(failedTestNode.test).runLocally()
@@ -873,8 +865,6 @@ private class RemoteRunToolWindowPanel(
         null,
         AllIcons.Nodes.Class,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestClassNode = selectedFailedTestClass() ?: return
             navigateToClass(failedTestClassNode.classFqName)
@@ -886,8 +876,6 @@ private class RemoteRunToolWindowPanel(
         null,
         AllIcons.RunConfigurations.TestState.Red2,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestClassNode = selectedFailedTestClass() ?: return
             val failedTests = failedTestClassNode.children().toList().filterIsInstance<FailedTestNode>().map { it.test }
@@ -900,8 +888,6 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.open.description"),
         null,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             val build = selectedBuild() ?: return
             BrowserUtil.browse(build.webUrl)
@@ -932,8 +918,6 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.run.failed.description"),
         AllIcons.RunConfigurations.TestState.Red2,
     ) {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
         override fun actionPerformed(e: AnActionEvent) {
             val build = selectedBuild() ?: return
             val service = project.getServiceIfCreated(TeamCityBuildStatusService::class.java) ?: return
