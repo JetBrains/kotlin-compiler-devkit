@@ -946,7 +946,7 @@ private class RemoteRunToolWindowPanel(
      * NB: [MAX_FAILED_TESTS] limits the number of tests it's possible to rerun locally.
      */
     private fun List<FailedTest>.runLocally() {
-        val fqTests = mapNotNull(::failedTestFqName)
+        val fqTests = mapNotNullTo(mutableSetOf(), ::failedTestFqName)
         val workingDirectory = project.basePath
             ?: return project.toast("Failed to get the project working directory", MessageType.ERROR)
         findAndLaunchTestsByFqReferences(

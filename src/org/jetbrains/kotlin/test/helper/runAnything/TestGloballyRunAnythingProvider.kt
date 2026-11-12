@@ -93,7 +93,7 @@ private val Int.isEven get() = this and 1 == 0
 private val Int.isOdd get() = !isEven
 
 internal fun findAndLaunchTestsByFqReferences(
-    tests: List<String>,
+    tests: Collection<String>,
     workingDirectory: String,
     executor: Executor?,
     project: Project,
