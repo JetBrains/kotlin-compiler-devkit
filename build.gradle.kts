@@ -19,7 +19,7 @@ plugins {
 dependencies {
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        intellijIdea("2025.3.5")
+        intellijIdea("2026.2")
         testFramework(TestFrameworkType.Platform)
 
         // Add plugin dependencies for compilation here:
@@ -60,6 +60,7 @@ intellijPlatform {
                 .run { markdownToHTML(this) }
 
         ideaVersion {
+            sinceBuild = "262"
             untilBuild = provider { null }
         }
     }
@@ -75,11 +76,11 @@ intellijPlatform {
 
 tasks {
     withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
+        sourceCompatibility = "25"
+        targetCompatibility = "25"
     }
     withType<KotlinCompile> {
-        compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
+        compilerOptions.jvmTarget.set(JvmTarget.JVM_25)
         compilerOptions.freeCompilerArgs.add("-Xcontext-parameters")
     }
 
@@ -106,7 +107,7 @@ sourceSets {
     maxHeapSize = "3g"
 }
 
-intellijPlatformTesting.runIde.register("runIde262") {
+intellijPlatformTesting.runIde.register("runIde263") {
     type = IntelliJPlatformType.IntellijIdea
-    version = "2026.2"
+    version = "2026.3"
 }

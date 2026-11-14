@@ -16,6 +16,9 @@
   authenticate with the GitHub account configured in the IDE, which GitHub's GraphQL API effectively requires. See
   [docs/remote-run.md](docs/remote-run.md).
 - Add "Run Tests Locally" actions to the "Remote Run" tool window.
+- Show the severity of diagnostics declared in a `KtDiagnosticsContainer` as a colored badge in Quick Documentation,
+  together with its KDoc, the language feature of deprecation diagnostics, the positioning strategy, the PSI type and
+  the containing container.
 
 ## 1.0.113
 - Migrate test data manager actions to the `checkTestData` / `updateTestData` Gradle tasks (options passed as `-P` properties). The removed `manageTestDataGlobally` task is no longer used.
