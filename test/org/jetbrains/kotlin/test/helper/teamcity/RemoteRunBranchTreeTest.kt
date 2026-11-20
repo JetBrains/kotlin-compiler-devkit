@@ -6,7 +6,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.intellij.openapi.actionSystem.Presentation
+import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.JBUI
+import java.awt.event.MouseEvent
 import javax.swing.ImageIcon
 import javax.swing.JComponent
 import javax.swing.JLabel
@@ -45,6 +47,45 @@ class RemoteRunBranchTreeTest {
 
         val rowWithoutPullRequest = renderer.render(JLabel("branch"), false, null, null, null)
         assertEquals(1, rowWithoutPullRequest.componentCount)
+    }
+
+    @Test
+    fun reviewBadgeFollowsThePullRequestBadges() = onEdt {
+        val reviewIcon = EmptyIcon.create(16)
+        val review = RemoteRunReviewBadge(reviewIcon, "Review tooltip")
+        val renderer = RemoteRunBranchCellRenderer(pullRequestIcon = ImageIcon(), pullRequestStatusIcon = ImageIcon())
+
+        val row = renderer.render(JLabel("branch"), true, "current", null, null, review)
+        val reviewBadge = row.getComponent(4) as JLabel
+
+        assertEquals(5, row.componentCount)
+        assertEquals(reviewIcon, reviewBadge.icon)
+        assertEquals(JBUI.scale(2), reviewBadge.border.getBorderInsets(reviewBadge).left)
+
+        assertEquals(1, renderer.render(JLabel("branch"), false, null, null, null, review).componentCount)
+        assertEquals(3, renderer.render(JLabel("branch"), true, null, null, null).componentCount)
+    }
+
+    @Test
+    fun reviewTooltipIsShownOverTheReviewBadgeOnly() = onEdt {
+        val renderer = RemoteRunBranchCellRenderer(
+            pullRequestIcon = EmptyIcon.create(16),
+            pullRequestStatusIcon = EmptyIcon.create(16),
+        )
+        val review = RemoteRunReviewBadge(EmptyIcon.create(16), "Review tooltip")
+
+        val row = renderer.render(JLabel("branch"), true, null, null, "Branch tooltip", review)
+        row.size = row.preferredSize
+        row.doLayout()
+        val reviewBadge = row.getComponent(3)
+        val reviewBadgeCenter = reviewBadge.x + reviewBadge.width / 2
+
+        assertEquals("Review tooltip", row.getToolTipText(mouseMovedTo(row, reviewBadgeCenter)))
+        assertEquals("Branch tooltip", row.getToolTipText(mouseMovedTo(row, 1)))
+
+        /* One renderer renders every row, so a row without review must not show the previous row's review. */
+        val rowWithoutReview = renderer.render(JLabel("branch"), true, null, null, "Branch tooltip")
+        assertEquals("Branch tooltip", rowWithoutReview.getToolTipText(mouseMovedTo(rowWithoutReview, reviewBadgeCenter)))
     }
 
     @Test
@@ -367,6 +408,9 @@ class RemoteRunBranchTreeTest {
     private fun onEdt(action: () -> Unit) {
         SwingUtilities.invokeAndWait { action() }
     }
+
+    private fun mouseMovedTo(component: JComponent, x: Int): MouseEvent =
+        MouseEvent(component, MouseEvent.MOUSE_MOVED, 0, 0, x, 1, 0, false)
 
     private data class TreeFixture(
         val tree: JTree,

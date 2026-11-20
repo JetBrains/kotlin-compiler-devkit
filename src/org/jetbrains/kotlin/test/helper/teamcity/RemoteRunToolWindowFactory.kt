@@ -59,8 +59,8 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.MyBundle
 import org.jetbrains.kotlin.test.helper.git.currentBranchName
 import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
+import org.jetbrains.kotlin.test.helper.github.BranchPullRequest
 import org.jetbrains.kotlin.test.helper.github.GitHubPullRequestService
-import org.jetbrains.kotlin.test.helper.github.OpenKotlinPullRequest
 import org.jetbrains.kotlin.test.helper.github.PullRequestsListener
 import org.jetbrains.kotlin.test.helper.github.githubPullRequestIcon
 import org.jetbrains.kotlin.test.helper.runAnything.findAndLaunchTestsByFqReferences
@@ -122,11 +122,14 @@ class RemoteRunToolWindowFactory : ToolWindowFactory {
 
 /**
  * One branch group in the tree.
+ *
+ * @property pullRequest the open or merged pull request of the branch.
  */
 private class BranchNode(
     val branchName: String,
     val isCurrent: Boolean,
-    val pullRequestUrl: String?,
+    val pullRequest: BranchPullRequest?,
+    val reviewBadge: RemoteRunReviewBadge?,
 ) : DefaultMutableTreeNode(branchName) {
     override fun isLeaf(): Boolean = false
 }
@@ -180,7 +183,7 @@ private data class TreeContent(
     val launchProgress: TeamCityLaunchProgress?,
     val builds: List<RememberedTeamCityBuild>,
     val failedTests: Map<String, FailedTestsResult>,
-    val pullRequestsByBranch: Map<String, OpenKotlinPullRequest>,
+    val pullRequestsByBranch: Map<String, BranchPullRequest>,
     val filterText: String,
 )
 
@@ -258,10 +261,11 @@ private class RemoteRunToolWindowPanel(
 
                 return branchCellRenderer.render(
                     branchComponent = component,
-                    hasPullRequest = branch.pullRequestUrl != null,
+                    hasPullRequest = branch.pullRequest != null,
                     currentBranchMarker = marker,
                     background = component.background,
                     toolTipText = (component as? JComponent)?.toolTipText,
+                    review = branch.reviewBadge,
                 )
             }
         }
@@ -375,7 +379,7 @@ private class RemoteRunToolWindowPanel(
     }
 
     /**
-     * Resolves the open pull request of every listed branch through the GitHub plugin.
+     * Resolves the open or merged pull request of every listed branch through the GitHub plugin.
      */
     private fun requestPullRequestRefresh() {
         GitHubPullRequestService.getInstance(project).requestRefresh(shownContent?.localBranchNames.orEmpty())
@@ -604,10 +608,12 @@ private class RemoteRunToolWindowPanel(
 
         val root = DefaultMutableTreeNode("Remote Run")
         for (branchName in orderedBranchNames) {
+            val branchPullRequest = content.pullRequestsByBranch[branchName]
             val branchNode = BranchNode(
                 branchName,
                 isCurrent = branchName == currentBranchName,
-                pullRequestUrl = content.pullRequestsByBranch[branchName]?.url,
+                pullRequest = branchPullRequest,
+                reviewBadge = branchPullRequest?.let(::pullRequestReviewBadge),
             )
             if (launchProgress != null && launchProgress.branchName == branchName) {
                 branchNode.add(PendingLaunchNode(launchProgress))
@@ -894,7 +900,7 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
-    /* Context menu action: opens the open pull request of the right-clicked branch in the browser. */
+    /* Context menu action: opens the open or merged pull request of the right-clicked branch in the browser. */
     private inner class OpenPullRequestAction : AnAction(
         MyBundle.message("teamcity.toolwindow.open.pull.request.text"),
         MyBundle.message("teamcity.toolwindow.open.pull.request.description"),
@@ -902,13 +908,13 @@ private class RemoteRunToolWindowPanel(
     ) {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
-        /* Only branches with an open pull request offer the action at all. */
+        /* Only branches with a pull request offer the action at all. */
         override fun update(e: AnActionEvent) {
-            e.presentation.isVisible = selectedBranchNode()?.pullRequestUrl != null
+            e.presentation.isVisible = selectedBranchNode()?.pullRequest != null
         }
 
         override fun actionPerformed(e: AnActionEvent) {
-            val pullRequestUrl = selectedBranchNode()?.pullRequestUrl ?: return
+            val pullRequestUrl = selectedBranchNode()?.pullRequest?.url ?: return
             BrowserUtil.browse(pullRequestUrl)
         }
     }
@@ -1008,9 +1014,16 @@ private class RemoteRunToolWindowPanel(
                             SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES,
                         )
                     }
-                    val pullRequestLine = value.pullRequestUrl
-                        ?.let { MyBundle.message("teamcity.window.branch.pull.request.tooltip") + "\n" }
-                    toolTipText = pullRequestLine.orEmpty() + MyBundle.message("teamcity.window.branch.tooltip")
+                    val pullRequestLine = when (value.pullRequest) {
+                        is BranchPullRequest.Open ->
+                            MyBundle.message("teamcity.window.branch.pull.request.tooltip") + "\n"
+
+                        is BranchPullRequest.Merged ->
+                            MyBundle.message("teamcity.window.branch.merged.pull.request.tooltip") + "\n"
+
+                        null -> ""
+                    }
+                    toolTipText = pullRequestLine + MyBundle.message("teamcity.window.branch.tooltip")
                 }
 
                 is BuildNode -> {
@@ -1193,7 +1206,14 @@ internal class RemoteRunBranchCellRenderer(
     pullRequestIcon: Icon = AllIcons.Vcs.Vendors.Github,
     private val pullRequestStatusIcon: Icon? = null,
 ) {
-    private val panel = JPanel().apply {
+    /**
+     * Has its own tooltip in the row: the tree asks the rendered row for the tooltip at the
+     * hovered point, translated into the row.
+     */
+    private val panel = object : JPanel() {
+        override fun getToolTipText(event: MouseEvent): String? =
+            reviewToolTipTextAt(event.x) ?: super.getToolTipText(event)
+    }.apply {
         layout = HorizontalLayout(0)
         isOpaque = true
         border = JBUI.Borders.emptyRight(4)
@@ -1205,9 +1225,18 @@ internal class RemoteRunBranchCellRenderer(
         isOpaque = false
         border = JBUI.Borders.emptyLeft(2)
     }
+    private val reviewBadge = JBLabel().apply {
+        isOpaque = false
+        border = JBUI.Borders.emptyLeft(2)
+    }
     private val currentBranchMarker = JBLabel().apply {
         isOpaque = false
     }
+
+    /**
+     * The tooltip of [reviewBadge] in the row rendered last; one renderer renders every row.
+     */
+    private var reviewToolTipText: String? = null
 
     fun render(
         branchComponent: Component,
@@ -1215,11 +1244,13 @@ internal class RemoteRunBranchCellRenderer(
         currentBranchMarker: String?,
         background: Color?,
         toolTipText: String?,
+        review: RemoteRunReviewBadge? = null,
     ): JPanel {
         panel.removeAll()
         panel.background = background
         panel.isOpaque = background != null
         panel.toolTipText = toolTipText
+        reviewToolTipText = null
         pullRequestBadge.border =
             if (hasPullRequest && currentBranchMarker != null) JBUI.Borders.emptyLeft(4) else null
         panel.add(branchComponent)
@@ -1235,9 +1266,27 @@ internal class RemoteRunBranchCellRenderer(
             panel.add(pullRequestBadge)
             pullRequestStatusBadge.icon = pullRequestStatusIcon ?: githubPullRequestIcon()
             if (pullRequestStatusBadge.icon != null) panel.add(pullRequestStatusBadge)
+
+            if (review != null) {
+                reviewBadge.icon = review.icon
+                reviewToolTipText = review.toolTipText
+                panel.add(reviewBadge)
+            }
         }
 
         return panel
+    }
+
+    /**
+     * The tree renders the hovered row before it asks for its tooltip, but does not lay the row
+     * out; the badges sit at their preferred widths, so laying the row out again places them.
+     */
+    private fun reviewToolTipTextAt(x: Int): String? {
+        val toolTipText = reviewToolTipText ?: return null
+
+        panel.size = panel.preferredSize
+        panel.doLayout()
+        return toolTipText.takeIf { x >= reviewBadge.x && x < reviewBadge.x + reviewBadge.width }
     }
 }
 

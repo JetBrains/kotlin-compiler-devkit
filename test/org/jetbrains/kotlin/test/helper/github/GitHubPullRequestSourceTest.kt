@@ -25,7 +25,7 @@ class GitHubPullRequestSourceTest : BasePlatformTestCase() {
 
         assertEquals(
             OpenKotlinPullRequestResult.Found(
-                OpenKotlinPullRequest("https://github.com/JetBrains/kotlin/pull/42", headSha)
+                OpenKotlinPullRequest("https://github.com/JetBrains/kotlin/pull/42", headSha, number = 42)
             ),
             result,
         )
@@ -33,14 +33,34 @@ class GitHubPullRequestSourceTest : BasePlatformTestCase() {
 
     fun testPullRequestListingUrlUsesOwnerAndEncodesBranchAsSingleQueryValue() {
         val branchName = "feature/topic?x=1&y=two"
-        val listingUrl = githubPullRequestsListingUrl("https://api.github.com", branchName)
-        val queryParameters = URI(listingUrl).rawQuery.split("&").associate { parameter ->
-            val (name, value) = parameter.split("=", limit = 2)
-            name to URLDecoder.decode(value, Charsets.UTF_8)
-        }
+        val queryParameters = queryParameters(githubPullRequestsListingUrl("https://api.github.com", branchName))
 
         assertEquals("JetBrains:$branchName", queryParameters["head"])
         assertEquals(2, queryParameters.size)
+    }
+
+    fun testBranchPullRequestsUrlListsTheNewestPullRequestsOfEveryState() {
+        val branchName = "feature/topic?x=1&y=two"
+        val listingUrl = githubBranchPullRequestsUrl("https://api.github.com", branchName)
+
+        assertEquals("/repos/JetBrains/kotlin/pulls", URI(listingUrl).rawPath)
+        assertEquals(
+            mapOf(
+                "state" to "all",
+                "head" to "JetBrains:$branchName",
+                "sort" to "created",
+                "direction" to "desc",
+                "per_page" to "100",
+            ),
+            queryParameters(listingUrl),
+        )
+    }
+
+    fun testIssueCommentsUrlListsTheCommentsOfThePullRequestInLargePages() {
+        assertEquals(
+            "https://api.github.com/repos/JetBrains/kotlin/issues/42/comments?per_page=100",
+            githubIssueCommentsUrl("https://api.github.com", 42),
+        )
     }
 
     fun testAMissingPullRequestIsAnInvalidResponse() {
@@ -77,6 +97,13 @@ class GitHubPullRequestSourceTest : BasePlatformTestCase() {
         assertEquals(OpenKotlinPullRequestResult.InvalidResponse, result)
     }
 
+    fun testAPullRequestWhoseUrlNamesAnotherNumberIsAnInvalidResponse() {
+        val result = pullRequest(url = "https://github.com/JetBrains/kotlin/pull/43")
+            .toOpenKotlinPullRequestResult("sellmair/remote-run")
+
+        assertEquals(OpenKotlinPullRequestResult.InvalidResponse, result)
+    }
+
     fun testAPullRequestWithAnInvalidHeadShaIsAnInvalidResponse() {
         val result = pullRequest(headRefOid = "not-a-sha").toOpenKotlinPullRequestResult("sellmair/remote-run")
 
@@ -84,6 +111,12 @@ class GitHubPullRequestSourceTest : BasePlatformTestCase() {
     }
 
     private val headSha = "0123456789abcdef0123456789abcdef01234567"
+
+    private fun queryParameters(url: String): Map<String, String> =
+        URI(url).rawQuery.split("&").associate { parameter ->
+            val (name, value) = parameter.split("=", limit = 2)
+            name to URLDecoder.decode(value, Charsets.UTF_8)
+        }
 
     private fun kotlinRepository(nameWithOwner: String?): GHRepository? = nameWithOwner?.let {
         GHRepository(
