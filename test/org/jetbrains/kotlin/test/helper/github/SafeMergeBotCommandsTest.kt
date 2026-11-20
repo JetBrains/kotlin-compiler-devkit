@@ -28,20 +28,6 @@ class SafeMergeBotCommandsTest {
     }
 
     @Test
-    fun aDryRunIsOfferedForEveryOpenPullRequest() {
-        val reviews = listOf(
-            null,
-            CodeOwnersReview.MissingComment,
-            review(CodeOwnersApproval.CHANGES_REQUESTED),
-            review(CodeOwnersApproval.APPROVED),
-        )
-
-        for (review in reviews) {
-            assertTrue(isSafeMergeBotCommandAvailable(SafeMergeBotCommand.DRY_RUN, openPullRequest(review)))
-        }
-    }
-
-    @Test
     fun aSafeMergeIsOfferedOnlyOnceEveryCodeOwnersRuleIsApproved() {
         assertTrue(
             isSafeMergeBotCommandAvailable(
@@ -88,21 +74,21 @@ class SafeMergeBotCommandsTest {
         val commentUrl = "$PULL_REQUEST_URL#issuecomment-3571234567"
         val commandLines = mutableListOf<GeneralCommandLine>()
 
-        val result = post(SafeMergeBotCommand.DRY_RUN) { commandLine ->
+        val result = post(SafeMergeBotCommand.SAFE_MERGE) { commandLine ->
             commandLines += commandLine
             ProcessOutput("$commentUrl\n", "", 0, false, false)
         }
 
         assertEquals(SafeMergeBotCommandResult.Posted(commentUrl), result)
         assertEquals(
-            listOf(listOf("pr", "comment", "42", "--repo", "JetBrains/kotlin", "--body", "/dry-run")),
+            listOf(listOf("pr", "comment", "42", "--repo", "JetBrains/kotlin", "--body", "/safe-merge")),
             commandLines.map { commandLine -> commandLine.parametersList.parameters },
         )
     }
 
     @Test
     fun aPostedCommandWithoutTheCommentUrlLinksThePullRequest() = runBlocking {
-        val result = post(SafeMergeBotCommand.DRY_RUN) { ProcessOutput("", "", 0, false, false) }
+        val result = post(SafeMergeBotCommand.SAFE_MERGE) { ProcessOutput("", "", 0, false, false) }
 
         assertEquals(SafeMergeBotCommandResult.Posted(PULL_REQUEST_URL), result)
     }
@@ -126,19 +112,19 @@ class SafeMergeBotCommandsTest {
 
         assertEquals(
             SafeMergeBotCommandResult.Failed(notSignedIn),
-            post(SafeMergeBotCommand.DRY_RUN) { ProcessOutput("", "$notSignedIn\n", 4, false, false) },
+            post(SafeMergeBotCommand.SAFE_MERGE) { ProcessOutput("", "$notSignedIn\n", 4, false, false) },
         )
         assertEquals(
             SafeMergeBotCommandResult.Failed("gh exited with code 1"),
-            post(SafeMergeBotCommand.DRY_RUN) { ProcessOutput("", "", 1, false, false) },
+            post(SafeMergeBotCommand.SAFE_MERGE) { ProcessOutput("", "", 1, false, false) },
         )
         assertEquals(
             SafeMergeBotCommandResult.Failed("Cannot run program"),
-            post(SafeMergeBotCommand.DRY_RUN) { throw ExecutionException("Cannot run program") },
+            post(SafeMergeBotCommand.SAFE_MERGE) { throw ExecutionException("Cannot run program") },
         )
         assertEquals(
             SafeMergeBotCommandResult.TimedOut,
-            post(SafeMergeBotCommand.DRY_RUN) { ProcessOutput("", "", -1, true, false) },
+            post(SafeMergeBotCommand.SAFE_MERGE) { ProcessOutput("", "", -1, true, false) },
         )
     }
 

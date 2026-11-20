@@ -282,12 +282,6 @@ private class RemoteRunToolWindowPanel(
             LaunchSafeMergeDryRunAction(),
             OpenPullRequestAction(),
             SafeMergeBotCommandAction(
-                SafeMergeBotCommand.DRY_RUN,
-                MyBundle.message("teamcity.toolwindow.bot.dry.run.text"),
-                MyBundle.message("teamcity.toolwindow.bot.dry.run.description"),
-                SafeMergeIcons.SafeMergeDryRun,
-            ),
-            SafeMergeBotCommandAction(
                 SafeMergeBotCommand.SAFE_MERGE,
                 MyBundle.message("teamcity.toolwindow.bot.safe.merge.text"),
                 MyBundle.message("teamcity.toolwindow.bot.safe.merge.description"),

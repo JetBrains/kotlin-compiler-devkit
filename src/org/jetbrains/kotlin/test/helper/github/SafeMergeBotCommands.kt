@@ -15,11 +15,6 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 internal enum class SafeMergeBotCommand(val comment: String) {
     /**
-     * Runs the test pipeline with the changes rebased on the latest master.
-     */
-    DRY_RUN("/dry-run"),
-
-    /**
      * Rebase-merges the pull request.
      */
     SAFE_MERGE("/safe-merge"),
@@ -33,7 +28,6 @@ internal fun isSafeMergeBotCommandAvailable(command: SafeMergeBotCommand, pullRe
     val openPullRequest = pullRequest as? BranchPullRequest.Open ?: return false
 
     return when (command) {
-        SafeMergeBotCommand.DRY_RUN -> true
         SafeMergeBotCommand.SAFE_MERGE ->
             openPullRequest.codeOwnersReview?.let(::codeOwnersReviewIndicator) == CodeOwnersReviewIndicator.APPROVED
     }

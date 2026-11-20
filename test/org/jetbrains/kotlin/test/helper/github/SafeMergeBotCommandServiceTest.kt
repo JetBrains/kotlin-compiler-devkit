@@ -32,34 +32,6 @@ class SafeMergeBotCommandServiceTest : BasePlatformTestCase() {
         }
     }
 
-    fun testPostsACommandOnlyOnceWhileItIsOnItsWay() {
-        val ghMayFinish = CompletableDeferred<Unit>()
-        val postedBodies = CopyOnWriteArrayList<String>()
-        val notifications = collectNotifications()
-        val service = service { commandLine ->
-            postedBodies += commandLine.parametersList.parameters.last()
-            ghMayFinish.await()
-            ProcessOutput("$PULL_REQUEST_URL#issuecomment-1\n", "", 0, false, false)
-        }
-
-        val dryRun = service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN)
-        waitFor("gh to run") { postedBodies.isNotEmpty() }
-
-        assertTrue(service.isPosting(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN))
-        assertNull(service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN))
-
-        /* Another command is another comment. */
-        val safeMerge = service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.SAFE_MERGE)
-        waitFor("gh to run again") { postedBodies.size == 2 }
-
-        ghMayFinish.complete(Unit)
-        waitFor("both comments to be posted") { dryRun.isFinished() && safeMerge.isFinished() && notifications.size == 2 }
-
-        assertEquals(setOf("/dry-run", "/safe-merge"), postedBodies.toSet())
-        assertFalse(service.isPosting(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN))
-        assertFalse(service.isPosting(OPEN_PULL_REQUEST, SafeMergeBotCommand.SAFE_MERGE))
-    }
-
     fun testNotifiesThePostedCommandWithALinkToGitHub() {
         val notifications = collectNotifications()
         val service = service { ProcessOutput("$PULL_REQUEST_URL#issuecomment-1\n", "", 0, false, false) }
@@ -78,17 +50,17 @@ class SafeMergeBotCommandServiceTest : BasePlatformTestCase() {
         val notifications = collectNotifications()
         val service = service { ProcessOutput("", "unknown flag: --body <x>\n", 1, false, false) }
 
-        val job = service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN)
+        val job = service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.SAFE_MERGE)
         waitFor("the failure to be reported") { job.isFinished() && notifications.isNotEmpty() }
 
         val notification = notifications.single()
         assertEquals(NotificationType.ERROR, notification.type)
         assertEquals("Kotlin pull request not commented", notification.title)
         assertEquals(
-            "Could not comment /dry-run on pull request #42: unknown flag: --body &lt;x&gt;",
+            "Could not comment /safe-merge on pull request #42: unknown flag: --body &lt;x&gt;",
             notification.content,
         )
-        assertFalse(service.isPosting(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN))
+        assertFalse(service.isPosting(OPEN_PULL_REQUEST, SafeMergeBotCommand.SAFE_MERGE))
     }
 
     /**
@@ -112,11 +84,11 @@ class SafeMergeBotCommandServiceTest : BasePlatformTestCase() {
         val notifications = collectNotifications()
         val service = serviceRunning(fakeGh)
 
-        val job = service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.DRY_RUN)
+        val job = service.post(OPEN_PULL_REQUEST, SafeMergeBotCommand.SAFE_MERGE)
         waitFor("the comment to be posted") { job.isFinished() && notifications.isNotEmpty() }
 
         assertEquals(
-            listOf("pr", "comment", "42", "--repo", "JetBrains/kotlin", "--body", "/dry-run"),
+            listOf("pr", "comment", "42", "--repo", "JetBrains/kotlin", "--body", "/safe-merge"),
             directory.resolve("arguments.txt").readLines(),
         )
         assertEquals(listOf("1"), directory.resolve("environment.txt").readLines())
