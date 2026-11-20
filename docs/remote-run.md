@@ -10,6 +10,8 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   resolution (the implementation is registered in `resources/META-INF/github-integration.xml`).
 - The [TeamCity CLI](https://www.jetbrains.com/help/teamcity/teamcity-cli-get-started.html) `teamcity`, version 1.6.1
   or newer, on the `PATH` or in `/opt/homebrew/bin` / `/usr/local/bin`.
+- The [GitHub CLI](https://cli.github.com) `gh`, signed in with `gh auth login`, for the "Dry Run" and "Safe Merge"
+  actions; on the `PATH` or in `/opt/homebrew/bin` / `/usr/local/bin`.
 
 ## Usage
 
@@ -63,6 +65,11 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   A branch without an open pull request whose latest pull request is merged shows a purple circle instead, and hovering
   it names the branch the pull request was merged into ("Merged into master"). An open pull request always wins, and a
   branch whose latest pull request was closed without merging shows no pull request at all.
+- The context menu of a branch with an open pull request also offers "Dry Run" and "Safe Merge", which comment
+  `/dry-run` and `/safe-merge` on the pull request for the `kotlin-safemerge` bot: a dry run runs the test pipeline
+  with the changes rebased on the latest master, a safe merge rebase-merges the pull request. "Safe Merge" is offered
+  only while the status icon is the green circle, i.e. every code owners rule is approved. A notification reports the
+  posted comment, with a link to it, or why it could not be posted.
 
 ## How it works
 
@@ -85,6 +92,7 @@ GitHub code lives in `src/org/jetbrains/kotlin/test/helper/github`.
 | `GitHubPullRequestService.kt` | Caches the open pull request and its code owners review, or else the merged pull request, of each listed branch, resolved per branch and throttled |
 | `CodeOwnersReview.kt` | Finds and parses the `kotlin-safemerge` bot's "Code Owners" comment; the review status precedence |
 | `CodeOwnersReviewBadge.kt` | Icon and tooltip of the code owners review, or of the merge, next to the pull request badge |
+| `SafeMergeBotCommands.kt`, `SafeMergeBotCommandService.kt` | Which bot commands a branch offers; comments them on its pull request through the GitHub CLI |
 
 ### Launching
 
@@ -152,6 +160,17 @@ red cross instead of a guessed status. A failed lookup, or comments beyond the t
 among the pages read, keeps the review previously read for the same pull request; a new pull request of the branch
 has no status until its review is read.
 
+### Bot commands
+
+"Dry Run" and "Safe Merge" run `gh pr comment <number> --repo JetBrains/kotlin --body /dry-run` (or `/safe-merge`)
+in the background. The repository is named explicitly because the number is one of a `JetBrains/kotlin` pull
+request, whatever remotes the checkout has, and `gh` refuses to guess between several remotes. `GH_PROMPT_DISABLED`
+keeps `gh` from prompting and `GH_NO_UPDATE_NOTIFIER` keeps update notices out of its output. The comment is posted
+as the account `gh` is signed in with, not as the GitHub account configured in the IDE. While a command is being
+posted on a pull request, the same action is disabled for it, so a second click does not post it twice. The
+approval that "Safe Merge" requires is the one read at the last refresh. Neither action asks for confirmation; the
+bot's `/cancel-coordinator` command cancels the merge coordinator running for the branch.
+
 ### Following a build
 
 - Launched builds (the 50 newest) are stored in the workspace file (`KotlinDevKitTeamCityBuilds`).
@@ -209,5 +228,5 @@ Tests are in `test/org/jetbrains/kotlin/test/helper/teamcity`, `.../helper/git`,
 
 ```bash
 ./gradlew test --tests '*TeamCity*' --tests '*RemoteRun*' --tests '*FailedTest*' --tests '*GitHubPullRequest*' \
-  --tests '*CodeOwners*'
+  --tests '*CodeOwners*' --tests '*SafeMergeBot*'
 ```
