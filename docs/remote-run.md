@@ -10,6 +10,8 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   resolution (the implementation is registered in `resources/META-INF/github-integration.xml`).
 - The [TeamCity CLI](https://www.jetbrains.com/help/teamcity/teamcity-cli-get-started.html) `teamcity`, version 1.6.1
   or newer, on the `PATH` or in `/opt/homebrew/bin` / `/usr/local/bin`.
+- The [GitHub CLI](https://cli.github.com) `gh`, signed in with `gh auth login`, for the "Dry Run" and "Safe Merge"
+  actions; on the `PATH` or in `/opt/homebrew/bin` / `/usr/local/bin`.
 
 ## Usage
 
@@ -43,9 +45,31 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   and "Refresh Branch", which fetches its aggregate builds and safe merges on demand; branches outside the
   recently checked out ones are fetched only that way. Branches with unfinished launched safe merges keep being
   refreshed automatically.
-- A branch with an open pull request in `JetBrains/kotlin` shows the GitHub logo to the right of its name; its context menu
-  offers "Open Pull Request" to open it in the browser. The open pull request of every listed branch is resolved
-  when the tool window becomes visible and on **Refresh**, at most once a minute.
+- A branch with an open or merged pull request in `JetBrains/kotlin` shows the GitHub logo to the right of its name; its
+  context menu offers "Open Pull Request" to open it in the browser. The pull request of every listed branch is
+  resolved when the tool window becomes visible and on **Refresh**, at most once a minute.
+- Next to the GitHub logo, a status icon shows the pull request's code owners review, as the `kotlin-safemerge` bot
+  reports it in its "Code Owners" comment. The first status that applies wins:
+  - red circle: a code owner requested changes;
+  - yellow circle: a review is requested, or a code owner only commented;
+  - white circle: a code owners rule has no reviewer;
+  - green circle: every rule is approved;
+  - red cross: the bot's comment is missing or cannot be read, which points to a problem with the merge
+    infrastructure; commenting `/codeowners` on the pull request asks the bot to post it again.
+
+  Hovering the icon shows the full status, whatever the icon: "Approved, ready to merge", or the lines
+  "Changes requested by @…", "Waiting for review from @…" (commenters included) and "Missing reviewers for
+  subsystems "…"", each only when it lists someone. A subsystem is a team owning a rule without reviewer, or the
+  rule's paths when no team owns it.
+
+  A branch without an open pull request whose latest pull request is merged shows a purple circle instead, and hovering
+  it names the branch the pull request was merged into ("Merged into master"). An open pull request always wins, and a
+  branch whose latest pull request was closed without merging shows no pull request at all.
+- The context menu of a branch with an open pull request also offers "Dry Run" and "Safe Merge", which comment
+  `/dry-run` and `/safe-merge` on the pull request for the `kotlin-safemerge` bot: a dry run runs the test pipeline
+  with the changes rebased on the latest master, a safe merge rebase-merges the pull request. "Safe Merge" is offered
+  only while the status icon is the green circle, i.e. every code owners rule is approved. A notification reports the
+  posted comment, with a link to it, or why it could not be posted.
 
 ## How it works
 
@@ -62,9 +86,13 @@ GitHub code lives in `src/org/jetbrains/kotlin/test/helper/github`.
 | `TeamCityBuildStatusService.kt` | Polls build statuses and failed tests; fetches branch builds and safe merges per round and on demand |
 | `TeamCityBranchBuilds.kt` | Fetches the aggregate builds and safe merges of the requested branches, and the build queue |
 | `TeamCityBuildStatus.kt`, `FailedTests.kt` | REST URLs, JSON parsing, status icons |
-| `GitHubPullRequests.kt` | Model of an open Kotlin pull request and of the strict resolution results |
-| `GitHubPullRequestSource.kt`, `DefaultGitHubPullRequestSource.kt` | Resolve a branch's open Kotlin pull request through the GitHub plugin's API machinery (`githubPullRequestSource` extension point; the implementation loads only with the GitHub plugin) |
-| `GitHubPullRequestService.kt` | Caches the open pull request of each listed branch, resolved per branch and throttled |
+| `GitHubPullRequests.kt` | Model of a branch's open or merged Kotlin pull request and of the strict resolution results |
+| `GitHubPullRequestSource.kt`, `DefaultGitHubPullRequestSource.kt` | Resolve a branch's open — or merged — Kotlin pull request through the GitHub plugin's API machinery (`githubPullRequestSource` extension point; the implementation loads only with the GitHub plugin) |
+| `GitHubPullRequestListing.kt` | Reads GitHub's listing of a branch's pull requests and picks the open or the merged one |
+| `GitHubPullRequestService.kt` | Caches the open pull request and its code owners review, or else the merged pull request, of each listed branch, resolved per branch and throttled |
+| `CodeOwnersReview.kt` | Finds and parses the `kotlin-safemerge` bot's "Code Owners" comment; the review status precedence |
+| `CodeOwnersReviewBadge.kt` | Icon and tooltip of the code owners review, or of the merge, next to the pull request badge |
+| `SafeMergeBotCommands.kt`, `SafeMergeBotCommandService.kt` | Which bot commands a branch offers; comments them on its pull request through the GitHub CLI |
 
 ### Launching
 
@@ -88,17 +116,60 @@ branch refresh.
 
 ### Pull request indicator
 
-`GitHubPullRequestService` resolves the open pull request of every branch listed in the tree, throttled to
+`GitHubPullRequestService` resolves the pull request of every branch listed in the tree, throttled to
 once a minute and never twice in parallel; the resolution happens when the tool window becomes visible and on
 both refresh actions. All GitHub requests go through the GitHub plugin's API machinery and authenticate with
 the GitHub account configured in the IDE — GitHub's GraphQL API, from which the plugin reads the pull request
 details, effectively requires it, because its unauthenticated per-IP quota is exhausted almost everywhere
 (e.g. behind a company network). Without an account, every lookup fails and the indicator keeps its previous
-state. A branch's lookup first asks GitHub for the open pull requests with the branch as head and then reads
-the matching pull request, keeping only pull requests whose head and base repository are both
-`JetBrains/kotlin`. A failed or unreadable lookup keeps the branch's previously resolved pull request and only
-logs. This cache is separate from the strict pull-request resolution of the safe-merge launch, which pins a
-fresh head SHA before starting anything and uses the same requests.
+state. A branch's lookup first lists the pull requests with the branch as head in every state (GitHub's REST
+`pulls?state=all`, the newest 100), so telling merged branches apart takes no extra request:
+
+- exactly one open pull request is then read in full and kept only if its head and base repository are both
+  `JetBrains/kotlin`; several open pull requests are ambiguous and show nothing;
+- without an open one, the branch is merged if its latest pull request — the one GitHub numbered last, among those
+  whose head and base repository are both `JetBrains/kotlin` — is merged. The merge bots rebase pull requests, and
+  often force-push their heads, before merging them, so neither git ancestry nor the local branch head can tell a
+  merged branch; GitHub's merged state can. A branch name reused after a merge therefore shows the merged pull
+  request until a new pull request is opened for it.
+
+A failed or unreadable lookup keeps the branch's previously resolved pull request and only logs. This cache is
+separate from the strict pull-request resolution of the safe-merge launch, which pins a fresh head SHA before
+starting anything: it lists only the open pull requests and reads the one it finds the same way.
+
+### Code owners review
+
+Every refresh that finds an open pull request also reads its code owners review, from the bot's comment rather than from
+GitHub's reviewers: the comment of the `kotlin-safemerge[bot]` GitHub App (only apps carry the `[bot]` suffix, so no
+user can impersonate it) that starts with a "Code Owners" header or carries the bot's `CODE_OWNERS_REVIEW_COMMENT`
+marker. The pull request's comments are listed through GitHub's REST API (`issues/<number>/comments`, 100 per page,
+at most 3 pages); the bot comments right after the pull request is opened and then edits its comment in place, so it
+is practically always on the first page. Should there be several, the most recently updated one wins.
+
+Only the first table of the comment is read — the code owners table, with a Rule, an Owners and an Approval column;
+the maintainer commands table that follows is ignored. Per rule:
+
+- the paths are the `<code>` elements of the Rule column, without the zero-width spaces the bot inserts for wrapping;
+- the owning teams are the collapsible team lists of the Owners column; the sub-teams a team lists inside its own list
+  do not count;
+- the approval is the label of the Approval column (`Approved`, `Changes requested`, `Review requested`, `Commented`
+  or `No reviewer`), and the reviewers are the GitHub logins linked after it (`<organization>/<team>` for teams).
+
+An unknown label, an unexpected table layout or a table without rules makes the comment unreadable, which shows the
+red cross instead of a guessed status. A failed lookup, or comments beyond the third page without the bot's comment
+among the pages read, keeps the review previously read for the same pull request; a new pull request of the branch
+has no status until its review is read.
+
+### Bot commands
+
+"Dry Run" and "Safe Merge" run `gh pr comment <number> --repo JetBrains/kotlin --body /dry-run` (or `/safe-merge`)
+in the background. The repository is named explicitly because the number is one of a `JetBrains/kotlin` pull
+request, whatever remotes the checkout has, and `gh` refuses to guess between several remotes. `GH_PROMPT_DISABLED`
+keeps `gh` from prompting and `GH_NO_UPDATE_NOTIFIER` keeps update notices out of its output. The comment is posted
+as the account `gh` is signed in with, not as the GitHub account configured in the IDE. While a command is being
+posted on a pull request, the same action is disabled for it, so a second click does not post it twice. The
+approval that "Safe Merge" requires is the one read at the last refresh. Neither action asks for confirmation; the
+bot's `/cancel-coordinator` command cancels the merge coordinator running for the branch.
 
 ### Following a build
 
@@ -156,5 +227,6 @@ a failed build of another branch runs only the tests that branch shares with the
 Tests are in `test/org/jetbrains/kotlin/test/helper/teamcity`, `.../helper/git`, and `.../helper/github`:
 
 ```bash
-./gradlew test --tests '*TeamCity*' --tests '*RemoteRun*' --tests '*FailedTest*' --tests '*GitHubPullRequest*'
+./gradlew test --tests '*TeamCity*' --tests '*RemoteRun*' --tests '*FailedTest*' --tests '*GitHubPullRequest*' \
+  --tests '*CodeOwners*' --tests '*SafeMergeBot*'
 ```

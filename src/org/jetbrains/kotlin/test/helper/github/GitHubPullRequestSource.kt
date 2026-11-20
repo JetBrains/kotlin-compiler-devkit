@@ -11,6 +11,22 @@ internal interface GitHubPullRequestSource {
      * pinned head SHA. Missing, ambiguous or failed lookups must never be treated as a pull request.
      */
     suspend fun findOpenPullRequest(branchName: String): OpenKotlinPullRequestResult
+
+    /**
+     * Resolves the pull request the Remote Run tree shows for [branchName]: its open
+     * `JetBrains/kotlin` pull request, as strictly as [findOpenPullRequest] does, or else its latest
+     * pull request if that one is merged. Sources that cannot tell merged pull requests only
+     * resolve the open one.
+     */
+    suspend fun findBranchPullRequest(branchName: String): BranchPullRequestResult =
+        findOpenPullRequest(branchName).toBranchPullRequestResult()
+
+    /**
+     * Reads the code owners review of [pullRequest] from the "Code Owners" comment of the
+     * `kotlin-safemerge` bot. A failed lookup must never be treated as a missing comment.
+     */
+    suspend fun findCodeOwnersReview(pullRequest: OpenKotlinPullRequest): CodeOwnersReviewResult =
+        CodeOwnersReviewResult.Failed("Reading the code owners review is not supported")
 }
 
 /**
@@ -22,6 +38,22 @@ internal interface GitHubPullRequestSource {
 internal suspend fun findOpenKotlinPullRequest(branchName: String): OpenKotlinPullRequestResult =
     GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.findOpenPullRequest(branchName)
         ?: OpenKotlinPullRequestResult.Failed("The GitHub integration plugin is not available")
+
+/**
+ * Resolves the open or merged Kotlin pull request of a branch through the GitHub plugin, like
+ * [findOpenKotlinPullRequest].
+ */
+internal suspend fun findKotlinBranchPullRequest(branchName: String): BranchPullRequestResult =
+    GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.findBranchPullRequest(branchName)
+        ?: BranchPullRequestResult.Failed("The GitHub integration plugin is not available")
+
+/**
+ * Reads the code owners review of a Kotlin pull request through the GitHub plugin, like
+ * [findOpenKotlinPullRequest].
+ */
+internal suspend fun findKotlinCodeOwnersReview(pullRequest: OpenKotlinPullRequest): CodeOwnersReviewResult =
+    GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.findCodeOwnersReview(pullRequest)
+        ?: CodeOwnersReviewResult.Failed("The GitHub integration plugin is not available")
 
 internal fun githubPullRequestIcon(): Icon? =
     GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.pullRequestIcon
