@@ -129,10 +129,9 @@ internal class DefaultGitHubPullRequestSource : GitHubPullRequestSource {
         }
 
         /* The unread pages may hold the comment, so it is missing only if none was found so far. */
-        return if (comments.any(::isCodeOwnersComment)) {
-            CodeOwnersReviewResult.Found(codeOwnersReviewOf(comments))
-        } else {
-            CodeOwnersReviewResult.Failed("No code owners comment in the first $MAX_COMMENT_PAGES pages of comments")
+        return when (val reviewResult = codeOwnersReviewOf(comments)) {
+            is CodeOwnersReview.MissingComment -> CodeOwnersReviewResult.Failed("No code owners comment in the first $MAX_COMMENT_PAGES pages of comments")
+            else -> CodeOwnersReviewResult.Found(reviewResult)
         }
     }
 

@@ -1,11 +1,13 @@
 package org.jetbrains.kotlin.test.helper.github
 
-import com.intellij.openapi.util.text.StringUtil
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.TextNode
 
 /**
  * The REST login of the `kotlin-safemerge` GitHub App. Only apps have the `[bot]` suffix, so no user
@@ -158,8 +160,8 @@ internal fun codeOwnersReviewOf(comments: List<GitHubIssueComment>): CodeOwnersR
  * approval is shown that the bot did not report.
  */
 internal fun parseCodeOwnersComment(body: String): CodeOwnersReview {
-    val table = tablePattern.find(body)?.groupValues?.get(1) ?: return unreadable("no table")
-    val rows = rowPattern.findAll(table).map { row -> row.groupValues[1] }.toList()
+    val table = Jsoup.parseBodyFragment(body).selectFirst("table") ?: return unreadable("no table")
+    val rows = table.select("tr")
     val header = rows.firstOrNull()?.let(::headerNames).orEmpty()
 
     val ruleColumn = header.indexOf("rule")
@@ -170,21 +172,21 @@ internal fun parseCodeOwnersComment(body: String): CodeOwnersReview {
     }
 
     val rules = rows.drop(1).map { row ->
-        val cells = dataCellPattern.findAll(row).map { cell -> cell.groupValues[1] }.toList()
+        val cells = row.select("td")
         if (cells.size != header.size) {
             return unreadable("a row has ${cells.size} cells instead of ${header.size}")
         }
 
         /* The approval label comes first; the reviewers follow on the next line. */
-        val approvalParts = lineBreakPattern.split(cells[approvalColumn], limit = 2)
-        val label = cleanText(approvalParts.first())
+        val approvalCell = ApprovalCell(cells[approvalColumn])
+        val label = cleanText(approvalCell.label)
         val approval = approvalOfLabel(label) ?: return unreadable("unknown approval '$label'")
 
         CodeOwnersRule(
             paths = rulePaths(cells[ruleColumn]),
             ownerTeams = ownerTeams(cells[ownersColumn]),
             approval = approval,
-            reviewers = approvalParts.getOrNull(1)?.let(::reviewers).orEmpty(),
+            reviewers = reviewers(approvalCell.reviewerLinks),
         )
     }
 
@@ -201,8 +203,8 @@ internal fun nextPageLink(linkHeader: String?): String? =
 
 private fun unreadable(reason: String): CodeOwnersReview = CodeOwnersReview.UnreadableComment(reason)
 
-private fun headerNames(headerRow: String): List<String> =
-    headerCellPattern.findAll(headerRow).map { cell -> cleanText(cell.groupValues[1]).lowercase() }.toList()
+private fun headerNames(headerRow: Element): List<String> =
+    headerRow.select("th").map { cell -> cleanText(cell.text()).lowercase() }
 
 /**
  * Labels are compared without their leading emoji, which only repeats the label.
@@ -217,69 +219,65 @@ private fun approvalOfLabel(label: String): CodeOwnersApproval? =
         else -> null
     }
 
-private fun rulePaths(ruleCell: String): List<String> {
-    val paths = codePattern.findAll(ruleCell)
-        .map { code -> cleanText(code.groupValues[1]) }
-        .filter(String::isNotEmpty)
-        .toList()
+/**
+ * The parts of the Approval cell: its label before the first line break, and the reviewer links after it.
+ */
+private class ApprovalCell(cell: Element) {
+    val label: String
+    val reviewerLinks: List<Element>
 
-    return paths.ifEmpty { listOfNotNull(cleanText(ruleCell).takeIf(String::isNotEmpty)) }
+    init {
+        val nodes = cell.nodeStream().toList()
+        val lineBreak = nodes.indexOfFirst { node -> node is Element && node.tagName() == "br" }
+        val labelEnd = if (lineBreak < 0) nodes.size else lineBreak
+
+        label = nodes.subList(0, labelEnd)
+            .filterIsInstance<TextNode>()
+            .joinToString("") { textNode -> textNode.wholeText }
+        reviewerLinks = nodes.subList(labelEnd, nodes.size)
+            .filterIsInstance<Element>()
+            .filter { node -> node.tagName() == "a" }
+    }
+}
+
+private fun rulePaths(ruleCell: Element): List<String> {
+    val paths = ruleCell.select("code")
+        .map { code -> cleanText(code.text()) }
+        .filter(String::isNotEmpty)
+
+    return paths.ifEmpty { listOfNotNull(cleanText(ruleCell.text()).takeIf(String::isNotEmpty)) }
 }
 
 /**
  * Teams are collapsible lists whose summary links the team. A team lists its sub-teams the same way
  * inside its own list, so only the teams on the top level are the rule's owners.
  */
-private fun ownerTeams(ownersCell: String): List<String> {
-    var depth = 0
-    val teams = mutableListOf<String>()
-
-    for (token in ownersTokenPattern.findAll(ownersCell)) {
-        when {
-            token.value.startsWith("</") -> depth--
-            token.value.startsWith("<summary", ignoreCase = true) -> {
-                val summary = token.groupValues[1]
-                if (depth == 1 && teamLinkPattern.containsMatchIn(summary)) {
-                    cleanText(summary).takeIf(String::isNotEmpty)?.let(teams::add)
-                }
-            }
-
-            else -> depth++
+private fun ownerTeams(ownersCell: Element): List<String> =
+    ownersCell.select("details")
+        .filter { details -> details.parents().none { it.tagName() == "details" } }
+        .mapNotNull { details ->
+            val summary = details.children().firstOrNull { it.tagName() == "summary" } ?: return@mapNotNull null
+            val linksTheTeam = summary.select("[href]").any { teamUrlPattern.matchEntire(it.attr("href")) != null }
+            if (linksTheTeam) cleanText(summary.text()).takeIf(String::isNotEmpty) else null
         }
-    }
-
-    return teams.distinct()
-}
+        .distinct()
 
 /**
  * Reviewers are linked to their GitHub profile; teams to their team page.
  */
-private fun reviewers(reviewersHtml: String): List<String> =
-    linkPattern.findAll(reviewersHtml).mapNotNull { link ->
-        val url = link.groupValues[1]
+private fun reviewers(links: List<Element>): List<String> =
+    links.mapNotNull { link ->
+        val url = link.attr("href")
         userUrlPattern.matchEntire(url)?.groupValues?.get(1)
             ?: teamUrlPattern.matchEntire(url)?.let { team -> "${team.groupValues[1]}/${team.groupValues[2]}" }
-    }.distinct().toList()
+    }.distinct()
 
 /**
- * The text of an HTML fragment. The bot breaks paths with zero-width spaces for line wrapping.
+ * The text of a parsed fragment: jsoup has stripped its tags and decoded its character references, so
+ * only the invisible characters the bot inserts for line wrapping remain to be removed.
  */
-private fun cleanText(html: String): String {
-    val text = tagPattern.replace(html, "")
-    val decodedText = StringUtil.unescapeXmlEntities(
-        numericCharacterReferencePattern.replace(text) { reference ->
-            val codePoint = reference.groupValues[1].takeIf(String::isNotEmpty)?.toIntOrNull(16)
-                ?: reference.groupValues[2].toIntOrNull()
-            if (codePoint != null && Character.isValidCodePoint(codePoint)) {
-                String(Character.toChars(codePoint))
-            } else {
-                reference.value
-            }
-        }
-    )
-
-    return whitespacePattern.replace(invisibleCharacterPattern.replace(decodedText, ""), " ").trim()
-}
+private fun cleanText(text: String): String =
+    whitespacePattern.replace(invisibleCharacterPattern.replace(text, ""), " ").trim()
 
 private fun JsonObject.stringOrNull(key: String): String? {
     val value = get(key) as? JsonPrimitive ?: return null
@@ -288,23 +286,9 @@ private fun JsonObject.stringOrNull(key: String): String? {
 
 private const val CODE_OWNERS_COMMENT_MARKER = "<!-- CODE_OWNERS_REVIEW_COMMENT -->"
 
-private val htmlPatternOptions = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
 private val codeOwnersHeaderPattern = Regex("""#{1,6}\s*Code\s+Owners\s*#*""", RegexOption.IGNORE_CASE)
-private val tablePattern = Regex("""<table\b[^>]*>(.*?)</table\s*>""", htmlPatternOptions)
-private val rowPattern = Regex("""<tr\b[^>]*>(.*?)</tr\s*>""", htmlPatternOptions)
-private val headerCellPattern = Regex("""<th\b[^>]*>(.*?)</th\s*>""", htmlPatternOptions)
-private val dataCellPattern = Regex("""<td\b[^>]*>(.*?)</td\s*>""", htmlPatternOptions)
-private val codePattern = Regex("""<code\b[^>]*>(.*?)</code\s*>""", htmlPatternOptions)
-private val ownersTokenPattern =
-    Regex("""<details\b[^>]*>|</details\s*>|<summary\b[^>]*>(.*?)</summary\s*>""", htmlPatternOptions)
-private val lineBreakPattern = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
-private val linkPattern = Regex("""<a\b[^>]*?\bhref\s*=\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
-private val teamLinkPattern =
-    Regex("""\bhref\s*=\s*"https://github\.com/orgs/[^/"]+/teams/[^/"]+/?"""", RegexOption.IGNORE_CASE)
 private val userUrlPattern = Regex("""https://github\.com/([A-Za-z0-9-]+)/?""")
 private val teamUrlPattern = Regex("""https://github\.com/orgs/([A-Za-z0-9-]+)/teams/([A-Za-z0-9._-]+)/?""")
-private val tagPattern = Regex("""<[^>]*>""")
-private val numericCharacterReferencePattern = Regex("""&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));""")
 private val invisibleCharacterPattern = Regex("[\u200B\u200C\u200D\u2060\uFEFF]")
 private val whitespacePattern = Regex("""[\s\u00A0]+""")
 private val nextPageLinkPattern = Regex("""<([^>]*)>\s*;\s*rel\s*=\s*"next"""")
