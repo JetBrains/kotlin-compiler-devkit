@@ -20,6 +20,9 @@
   awaiting review, missing reviewer, approved, or a red cross when the comment is missing. Hovering the icon lists who
   requested changes, whose review is pending and which subsystems have no reviewer. A branch whose latest pull request
   is merged shows a purple circle instead. See [docs/remote-run.md](docs/remote-run.md).
+- Add "Dry Run" and "Safe Merge" to the context menu of branches with an open `JetBrains/kotlin` pull request in the
+  "Remote Run" tool window: they comment `/dry-run` or `/safe-merge` on the pull request for the `kotlin-safemerge`
+  bot through the GitHub CLI (`gh`). "Safe Merge" is offered only once every code owners rule is approved.
 - Add "Run Tests Locally" actions to the "Remote Run" tool window.
 - Show the severity of diagnostics declared in a `KtDiagnosticsContainer` as a colored badge in Quick Documentation,
   together with its KDoc, the language feature of deprecation diagnostics, the positioning strategy, the PSI type and

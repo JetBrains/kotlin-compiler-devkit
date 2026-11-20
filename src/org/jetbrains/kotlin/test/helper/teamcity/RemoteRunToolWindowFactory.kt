@@ -62,7 +62,10 @@ import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
 import org.jetbrains.kotlin.test.helper.github.BranchPullRequest
 import org.jetbrains.kotlin.test.helper.github.GitHubPullRequestService
 import org.jetbrains.kotlin.test.helper.github.PullRequestsListener
+import org.jetbrains.kotlin.test.helper.github.SafeMergeBotCommand
+import org.jetbrains.kotlin.test.helper.github.SafeMergeBotCommandService
 import org.jetbrains.kotlin.test.helper.github.githubPullRequestIcon
+import org.jetbrains.kotlin.test.helper.github.isSafeMergeBotCommandAvailable
 import org.jetbrains.kotlin.test.helper.runAnything.findAndLaunchTestsByFqReferences
 import org.jetbrains.kotlin.test.helper.toast
 import java.awt.BorderLayout
@@ -278,6 +281,12 @@ private class RemoteRunToolWindowPanel(
             LaunchSelectedBranchAction(),
             LaunchSafeMergeDryRunAction(),
             OpenPullRequestAction(),
+            SafeMergeBotCommandAction(
+                SafeMergeBotCommand.SAFE_MERGE,
+                MyBundle.message("teamcity.toolwindow.bot.safe.merge.text"),
+                MyBundle.message("teamcity.toolwindow.bot.safe.merge.description"),
+                SafeMergeIcons.SafeMerge,
+            ),
             RefreshBranchAction(),
         )
         val buildPopupMenu = createPopupMenu(
@@ -916,6 +925,38 @@ private class RemoteRunToolWindowPanel(
         override fun actionPerformed(e: AnActionEvent) {
             val pullRequestUrl = selectedBranchNode()?.pullRequest?.url ?: return
             BrowserUtil.browse(pullRequestUrl)
+        }
+    }
+
+    /*
+     * Context menu actions: comment a kotlin-safemerge bot command on the open pull request of the
+     * right-clicked branch. Both are hidden without an open pull request, and a safe merge also until
+     * every code owners rule is approved.
+     */
+    private inner class SafeMergeBotCommandAction(
+        private val command: SafeMergeBotCommand,
+        text: String,
+        description: String,
+        icon: Icon,
+    ) : AnAction(text, description, icon) {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        /* Disabled while the same command is on its way to the pull request. */
+        override fun update(e: AnActionEvent) {
+            val pullRequest = selectedBranchNode()?.pullRequest
+            val openPullRequest = (pullRequest as? BranchPullRequest.Open)?.pullRequest
+
+            e.presentation.isVisible = isSafeMergeBotCommandAvailable(command, pullRequest)
+            e.presentation.isEnabled = openPullRequest != null &&
+                !SafeMergeBotCommandService.getInstance(project).isPosting(openPullRequest, command)
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val pullRequest = selectedBranchNode()?.pullRequest
+            if (!isSafeMergeBotCommandAvailable(command, pullRequest)) return
+            val openPullRequest = (pullRequest as? BranchPullRequest.Open)?.pullRequest ?: return
+
+            SafeMergeBotCommandService.getInstance(project).post(openPullRequest, command)
         }
     }
 
