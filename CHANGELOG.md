@@ -15,6 +15,11 @@
   GitHub plugin, at most once a minute. The GitHub requests — also of the safe-merge pull-request resolution —
   authenticate with the GitHub account configured in the IDE, which GitHub's GraphQL API effectively requires. See
   [docs/remote-run.md](docs/remote-run.md).
+- Show the code owners review of a branch's open `JetBrains/kotlin` pull request next to its GitHub logo in the
+  "Remote Run" tool window, as the `kotlin-safemerge` bot reports it in its "Code Owners" comment: changes requested,
+  awaiting review, missing reviewer, approved, or a red cross when the comment is missing. Hovering the icon lists who
+  requested changes, whose review is pending and which subsystems have no reviewer. A branch whose latest pull request
+  is merged shows a purple circle instead. See [docs/remote-run.md](docs/remote-run.md).
 - Add "Run Tests Locally" actions to the "Remote Run" tool window.
 - Show the severity of diagnostics declared in a `KtDiagnosticsContainer` as a colored badge in Quick Documentation,
   together with its KDoc, the language feature of deprecation diagnostics, the positioning strategy, the PSI type and
