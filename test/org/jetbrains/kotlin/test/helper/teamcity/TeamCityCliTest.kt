@@ -39,6 +39,7 @@ class TeamCityCliTest {
                 OpenKotlinPullRequest(
                     url = "https://github.com/JetBrains/kotlin/pull/42",
                     headSha = "0123456789abcdef0123456789abcdef01234567",
+                    number = 42,
                 ),
             ),
         )
