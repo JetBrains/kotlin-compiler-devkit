@@ -2,6 +2,8 @@ package org.jetbrains.kotlin.test.helper.teamcity
 
 import com.intellij.dvcs.repo.VcsRepositoryManager
 import com.intellij.dvcs.repo.VcsRepositoryMappingListener
+import com.intellij.execution.Executor
+import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
@@ -290,14 +292,25 @@ private class RemoteRunToolWindowPanel(
             ),
             RefreshBranchAction(),
         )
+        val runExecutor = DefaultRunExecutor.getRunExecutorInstance()
+        val debugExecutor = DefaultDebugExecutor.getDebugExecutorInstance()
         val buildPopupMenu = createPopupMenu(
             StopSelectedBuildAction(),
             OpenBuildInTeamCityAction(),
             RemoveRememberedBuildAction(),
-            RunFailedTestsAction(),
+            RunFailedTestsAction(runExecutor),
+            RunFailedTestsAction(debugExecutor),
         )
-        val failedTestClassPopupMenu = createPopupMenu(NavigateToFailedTestClassAction(), RunFailedTestsOfClassAction())
-        val failedTestPopupMenu = createPopupMenu(NavigateToFailedTestAction(), RunTestLocallyAction())
+        val failedTestClassPopupMenu = createPopupMenu(
+            NavigateToFailedTestClassAction(),
+            RunFailedTestsOfClassAction(runExecutor),
+            RunFailedTestsOfClassAction(debugExecutor),
+        )
+        val failedTestPopupMenu = createPopupMenu(
+            NavigateToFailedTestAction(),
+            RunTestLocallyAction(runExecutor),
+            RunTestLocallyAction(debugExecutor),
+        )
 
         tree.addMouseListener(object : PopupHandler() {
             override fun invokePopup(component: Component, x: Int, y: Int) {
@@ -865,14 +878,14 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
-    private inner class RunTestLocallyAction : AnAction(
-        MyBundle.message("teamcity.toolwindow.run.test.locally"),
-        null,
-        AllIcons.RunConfigurations.TestState.Red2,
+    private inner class RunTestLocallyAction(private val executor: Executor) : AnAction(
+        MyBundle.message("teamcity.toolwindow.run.test.locally", executor.actionName),
+        executor.description,
+        executor.icon,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestNode = selectedFailedTest() ?: return
-            listOf(failedTestNode.test).runLocally()
+            listOf(failedTestNode.test).runLocally(executor)
         }
     }
 
@@ -887,15 +900,15 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
-    private inner class RunFailedTestsOfClassAction : AnAction(
-        MyBundle.message("teamcity.toolwindow.run.tests.of.class.locally"),
+    private inner class RunFailedTestsOfClassAction(private val executor: Executor) : AnAction(
+        MyBundle.message("teamcity.toolwindow.run.tests.of.class.locally", executor.actionName),
         null,
-        AllIcons.RunConfigurations.TestState.Red2,
+        executor.icon,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestClassNode = selectedFailedTestClass() ?: return
             val failedTests = failedTestClassNode.children().toList().filterIsInstance<FailedTestNode>().map { it.test }
-            failedTests.runLocally()
+            failedTests.runLocally(executor)
         }
     }
 
@@ -961,28 +974,28 @@ private class RemoteRunToolWindowPanel(
         }
     }
 
-    private inner class RunFailedTestsAction : AnAction(
-        MyBundle.message("teamcity.toolwindow.run.failed.text"),
+    private inner class RunFailedTestsAction(private val executor: Executor) : AnAction(
+        MyBundle.message("teamcity.toolwindow.run.failed.text", executor.actionName),
         MyBundle.message("teamcity.toolwindow.run.failed.description"),
-        AllIcons.RunConfigurations.TestState.Red2,
+        executor.icon,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
             val build = selectedBuild() ?: return
             val service = project.getServiceIfCreated(TeamCityBuildStatusService::class.java) ?: return
             val failedTests = service.failedTests(build.buildId) ?: return
-            failedTests.tests.runLocally()
+            failedTests.tests.runLocally(executor)
         }
     }
 
     /**
      * NB: [MAX_FAILED_TESTS] limits the number of tests it's possible to rerun locally.
      */
-    private fun List<FailedTest>.runLocally() {
+    private fun List<FailedTest>.runLocally(executor: Executor) {
         val fqTests = mapNotNullTo(mutableSetOf(), ::failedTestFqName)
         val workingDirectory = project.basePath
             ?: return project.toast("Failed to get the project working directory", MessageType.ERROR)
         findAndLaunchTestsByFqReferences(
-            fqTests, workingDirectory, DefaultRunExecutor.getRunExecutorInstance(), project
+            fqTests, workingDirectory, executor, project
         )
     }
 
