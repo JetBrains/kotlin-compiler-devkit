@@ -857,7 +857,7 @@ private class RemoteRunToolWindowPanel(
     private inner class NavigateToFailedTestAction : AnAction(
         MyBundle.message("teamcity.toolwindow.navigate.to.test"),
         null,
-        AllIcons.RunConfigurations.TestFailed,
+        AllIcons.Nodes.Method,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
             val failedTestNode = selectedFailedTest() ?: return
@@ -902,7 +902,7 @@ private class RemoteRunToolWindowPanel(
     private inner class OpenBuildInTeamCityAction : AnAction(
         MyBundle.message("teamcity.toolwindow.open.text"),
         MyBundle.message("teamcity.toolwindow.open.description"),
-        null,
+        AllIcons.General.Export,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
             val build = selectedBuild() ?: return
