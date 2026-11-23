@@ -1,12 +1,22 @@
 package org.jetbrains.kotlin.test.helper.executor
 
 import com.intellij.execution.Executor
+import com.intellij.execution.ExecutorRegistry
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import javax.swing.Icon
 
 class RunAndApplyDiffsExecutor : Executor() {
     companion object {
         const val EXECUTOR_ID = "RunAndApplyDiffs"
+
+        init {
+            ExternalSystemUtil.registerRunnerId(EXECUTOR_ID, RunAndApplyDiffsProgramRunner.RUNNER_ID)
+        }
+
+        fun getInstance(): Executor {
+            return ExecutorRegistry.getInstance().getExecutorById(EXECUTOR_ID)!!
+        }
     }
 
     override fun getToolWindowId(): String = "Run"

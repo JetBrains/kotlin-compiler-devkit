@@ -60,6 +60,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.MyBundle
+import org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsExecutor
 import org.jetbrains.kotlin.test.helper.git.currentBranchName
 import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
 import org.jetbrains.kotlin.test.helper.github.BranchPullRequest
@@ -294,22 +295,26 @@ private class RemoteRunToolWindowPanel(
         )
         val runExecutor = DefaultRunExecutor.getRunExecutorInstance()
         val debugExecutor = DefaultDebugExecutor.getDebugExecutorInstance()
+        val runAndApplyExecutor = RunAndApplyDiffsExecutor.getInstance()
         val buildPopupMenu = createPopupMenu(
             StopSelectedBuildAction(),
             OpenBuildInTeamCityAction(),
             RemoveRememberedBuildAction(),
             RunFailedTestsAction(runExecutor),
             RunFailedTestsAction(debugExecutor),
+            RunFailedTestsAction(runAndApplyExecutor),
         )
         val failedTestClassPopupMenu = createPopupMenu(
             NavigateToFailedTestClassAction(),
             RunFailedTestsOfClassAction(runExecutor),
             RunFailedTestsOfClassAction(debugExecutor),
+            RunFailedTestsOfClassAction(runAndApplyExecutor),
         )
         val failedTestPopupMenu = createPopupMenu(
             NavigateToFailedTestAction(),
             RunTestLocallyAction(runExecutor),
             RunTestLocallyAction(debugExecutor),
+            RunTestLocallyAction(runAndApplyExecutor),
         )
 
         tree.addMouseListener(object : PopupHandler() {

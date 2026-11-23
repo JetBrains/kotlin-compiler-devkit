@@ -10,14 +10,17 @@ import com.intellij.openapi.components.service
 import com.intellij.platform.ide.progress.withBackgroundProgress
 import com.intellij.platform.util.progress.reportSequentialProgress
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.actions.runTestAndApplyDiffLoop
 import org.jetbrains.kotlin.test.helper.gradle.createCancellationCallback
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 
 class RunAndApplyDiffsProgramRunner : ProgramRunner<Nothing> {
-    override fun getRunnerId(): String = "RunAndApplyDiffsProgramRunner"
+    companion object {
+        const val RUNNER_ID = "RunAndApplyDiffsProgramRunner"
+    }
+
+    override fun getRunnerId(): String = RUNNER_ID
 
     override fun canRun(executorId: String, profile: RunProfile): Boolean {
         if (executorId != RunAndApplyDiffsExecutor.EXECUTOR_ID) return false
@@ -36,7 +39,10 @@ class RunAndApplyDiffsProgramRunner : ProgramRunner<Nothing> {
                     reporter.indeterminateStep("Running")
                     runTestAndApplyDiffLoop(project) {
                         withContext(Dispatchers.EDT) {
-                            ProgramRunnerUtil.executeConfiguration(runnerAndSettings, defaultExecutor)
+                            ProgramRunnerUtil.executeConfiguration(
+                                runnerAndSettings,
+                                defaultExecutor
+                            )
                         }
                         runnerAndSettings.createCancellationCallback(project)
                     }
