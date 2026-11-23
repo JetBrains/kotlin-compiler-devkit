@@ -30,6 +30,8 @@ dependencies {
         bundledPlugin("Git4Idea")
         bundledPlugin("org.jetbrains.plugins.github")
         bundledPlugin("com.intellij.mcpServer")
+
+        compatiblePlugin("DevKit")
     }
 
     testImplementation(libs.junit)

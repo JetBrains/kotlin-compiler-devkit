@@ -3,22 +3,15 @@ package org.jetbrains.kotlin.test.helper.teamcity
 import com.intellij.dvcs.repo.VcsRepositoryManager
 import com.intellij.dvcs.repo.VcsRepositoryMappingListener
 import com.intellij.execution.Executor
+import com.intellij.execution.Location
+import com.intellij.execution.PsiLocation
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbar
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.ModalityState
-import com.intellij.openapi.application.asContextElement
-import com.intellij.openapi.application.smartReadAction
+import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.application.*
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.MessageType
@@ -34,13 +27,7 @@ import com.intellij.psi.NavigatablePsiElement
 import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.codeStyle.MinusculeMatcher
 import com.intellij.psi.codeStyle.NameUtil
-import com.intellij.ui.AnimatedIcon
-import com.intellij.ui.ColoredTreeCellRenderer
-import com.intellij.ui.DocumentAdapter
-import com.intellij.ui.DoubleClickListener
-import com.intellij.ui.PopupHandler
-import com.intellij.ui.SearchTextField
-import com.intellij.ui.SimpleTextAttributes
+import com.intellij.ui.*
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.panels.HorizontalLayout
@@ -53,23 +40,12 @@ import com.intellij.util.ui.UIUtil
 import com.intellij.xml.util.XmlStringUtil
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import org.jetbrains.kotlin.test.helper.MyBundle
 import org.jetbrains.kotlin.test.helper.executor.RunAndApplyDiffsExecutor
 import org.jetbrains.kotlin.test.helper.git.currentBranchName
 import org.jetbrains.kotlin.test.helper.git.kotlinMonorepoRepository
-import org.jetbrains.kotlin.test.helper.github.BranchPullRequest
-import org.jetbrains.kotlin.test.helper.github.GitHubPullRequestService
-import org.jetbrains.kotlin.test.helper.github.PullRequestsListener
-import org.jetbrains.kotlin.test.helper.github.SafeMergeBotCommand
-import org.jetbrains.kotlin.test.helper.github.SafeMergeBotCommandService
-import org.jetbrains.kotlin.test.helper.github.githubPullRequestIcon
-import org.jetbrains.kotlin.test.helper.github.isSafeMergeBotCommandAvailable
+import org.jetbrains.kotlin.test.helper.github.*
 import org.jetbrains.kotlin.test.helper.runAnything.findAndLaunchTestsByFqReferences
 import org.jetbrains.kotlin.test.helper.toast
 import java.awt.BorderLayout
@@ -77,13 +53,7 @@ import java.awt.Color
 import java.awt.Component
 import java.awt.Font
 import java.awt.event.MouseEvent
-import javax.swing.Icon
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.JPopupMenu
-import javax.swing.JTree
-import javax.swing.Timer
-import javax.swing.ToolTipManager
+import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeExpansionListener
@@ -305,16 +275,25 @@ private class RemoteRunToolWindowPanel(
             RunFailedTestsAction(runAndApplyExecutor),
         )
         val failedTestClassPopupMenu = createPopupMenu(
-            NavigateToFailedTestClassAction(),
             RunFailedTestsOfClassAction(runExecutor),
             RunFailedTestsOfClassAction(debugExecutor),
             RunFailedTestsOfClassAction(runAndApplyExecutor),
+            NavigateToFailedTestClassAction(),
         )
+
+        val navigateToTestDataAction =
+            object : AnActionWrapper(ActionManager.getInstance().getAction("TestData.Navigate")) {
+                override fun update(e: AnActionEvent) {
+                    super.update(e)
+                    e.presentation.icon = AllIcons.Nodes.Folder
+                }
+            }
         val failedTestPopupMenu = createPopupMenu(
-            NavigateToFailedTestAction(),
             RunTestLocallyAction(runExecutor),
             RunTestLocallyAction(debugExecutor),
             RunTestLocallyAction(runAndApplyExecutor),
+            navigateToTestDataAction,
+            NavigateToFailedTestAction(),
         )
 
         tree.addMouseListener(object : PopupHandler() {
@@ -386,6 +365,18 @@ private class RemoteRunToolWindowPanel(
         ApplicationManager.getApplication().invokeLater({ updatePollingActivity() }, project.disposed)
 
         rebuildTreeModel()
+    }
+
+    override fun uiDataSnapshot(sink: DataSink) {
+        super.uiDataSnapshot(sink)
+
+        val node = selectedFailedTest() ?: return
+        val test = node.test
+
+        sink.lazy(Location.DATA_KEY) {
+            val target = findFailedTestTarget(project, test) ?: return@lazy null
+            PsiLocation(target)
+        }
     }
 
     override fun dispose() {
