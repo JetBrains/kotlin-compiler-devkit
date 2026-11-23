@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.test.helper.actions
 
+import andel.intervals.toReversedList
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
@@ -39,11 +40,51 @@ sealed class TestDescription {
         override val psi: PsiNameIdentifierOwner
     ) : TestDescription()
 
-    class GeneratedOnTheFly(
-        override val psi: PsiClass,
-        val file: VirtualFile,
-        val fileOfParentPsi: VirtualFile,
-    ) : TestDescription()
+    sealed class GeneratedOnTheFly : TestDescription() {
+        abstract fun completeTaskArguments(prefix: String): String
+
+        class ByPsi(
+            override val psi: PsiClass,
+            val file: VirtualFile,
+            val fileOfParentPsi: VirtualFile,
+        ) : GeneratedOnTheFly() {
+            override fun completeTaskArguments(prefix: String): String {
+                var current = file
+                val parent = fileOfParentPsi
+
+                return buildString {
+                    append(prefix)
+
+                    val missingPart = sequence {
+                        if (!file.isDirectory) {
+                            yield(".test" + current.normalizedName())
+                            current = current.parent
+                        }
+
+                        while (current != parent) {
+                            yield("$" + current.normalizedName())
+                            current = current.parent
+                        }
+                    }.toReversedList().joinToString("")
+
+                    insert(length - 1, missingPart)
+                }
+            }
+        }
+
+        class ByMethodName(
+            override val psi: PsiClass,
+            val methodName: String
+        ) : GeneratedOnTheFly() {
+            override fun completeTaskArguments(prefix: String): String {
+                return buildString {
+                    append(prefix)
+                    append(".")
+                    append(methodName)
+                }
+            }
+        }
+    }
 }
 
 fun collectAndGroupTestDescriptions(files: List<VirtualFile>, project: Project): Map<String, List<TestDescription>> {
@@ -78,7 +119,7 @@ fun VirtualFile.collectTestDescriptions(
                 parent.collectTestMethodsIfTestData(project)
                     .mapNotNull {
                         when (it) {
-                            is PsiClass -> TestDescription.GeneratedOnTheFly(it, this, parent)
+                            is PsiClass -> TestDescription.GeneratedOnTheFly.ByPsi(it, this, parent)
                             is PsiMethod -> TestDescription.ExistingTest(it)
                             else -> null
                         }

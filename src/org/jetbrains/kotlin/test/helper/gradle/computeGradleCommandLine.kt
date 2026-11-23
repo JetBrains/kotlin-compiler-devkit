@@ -1,12 +1,10 @@
 package org.jetbrains.kotlin.test.helper.gradle
 
-import andel.intervals.toReversedList
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiNameIdentifierOwner
 import com.intellij.psi.util.parentOfType
 import org.jetbrains.kotlin.test.helper.actions.TestDescription
-import org.jetbrains.kotlin.test.helper.actions.normalizedName
 import org.jetbrains.plugins.gradle.execution.test.runner.GradleTestRunConfigurationProducer
 import org.jetbrains.plugins.gradle.util.createTestFilterFrom
 
@@ -53,27 +51,9 @@ private fun toTaskArguments(
     val taskArguments = createTestFilterFrom(parentClass, (psi as? PsiMethod)?.name)
 
     if (description.isOnTheFly()) {
-        var current = description.file
-        val parent = description.fileOfParentPsi
-
-        return buildString {
-            append(taskArguments)
-
-            val missingPart = sequence {
-                if (!description.file.isDirectory) {
-                    yield(".test" + current.normalizedName())
-                    current = current.parent
-                }
-
-                while (current != parent) {
-                    yield("$" + current.normalizedName())
-                    current = current.parent
-                }
-            }.toReversedList().joinToString("")
-
-            insert(length - 1, missingPart)
-        }
+        return description.completeTaskArguments(taskArguments)
     }
 
     return taskArguments
 }
+
