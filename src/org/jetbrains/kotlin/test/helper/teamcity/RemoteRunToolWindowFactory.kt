@@ -22,6 +22,7 @@ import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -1043,7 +1044,8 @@ private class RemoteRunToolWindowPanel(
                         if (value.isCurrent) SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
                         else SimpleTextAttributes.REGULAR_ATTRIBUTES
                     val matchingFragments =
-                        remoteRunBranchMatcher(searchField.text)?.matchingFragments(value.branchName)
+                        remoteRunBranchMatcher(searchField.text)?.match(value.branchName)
+                            ?.map { TextRange(it.startOffset, it.endOffset) }
                     if (matchingFragments == null) {
                         append(value.branchName, branchNameAttributes)
                     } else {
@@ -1372,7 +1374,7 @@ internal fun filterRemoteRunBranchNames(branchNames: List<String>, query: String
     val matcher = remoteRunBranchMatcher(query) ?: return branchNames
 
     return branchNames.filter { branchName ->
-        matcher.matchingFragments(branchName) != null
+        matcher.match(branchName) != null
     }
 }
 
@@ -1383,9 +1385,9 @@ internal fun bestMatchingRemoteRunBranchName(branchNames: List<String>, query: S
     var bestMatchStartOffset = Int.MAX_VALUE
 
     for (branchName in branchNames) {
-        val fragments = matcher.matchingFragments(branchName) ?: continue
+        val fragments = matcher.match(branchName) ?: continue
         val matchingDegree = matcher.matchingDegree(branchName, false, fragments)
-        val matchStartOffset = fragments.head.startOffset
+        val matchStartOffset = fragments.first().startOffset
 
         if (matchingDegree > bestMatchingDegree ||
             matchingDegree == bestMatchingDegree && matchStartOffset < bestMatchStartOffset
