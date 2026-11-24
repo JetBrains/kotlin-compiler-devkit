@@ -115,7 +115,7 @@ private class BranchNode(
 /**
  * One build under its branch: a remembered launch or a fetched aggregate build.
  */
-private class BuildNode(
+internal class BuildNode(
     val build: RememberedTeamCityBuild,
     val failedTests: FailedTestsResult?,
 ) : DefaultMutableTreeNode(build.buildId) {
@@ -123,14 +123,14 @@ private class BuildNode(
         failedTests.tests.isEmpty() && failedTests.remainingCount == 0
 }
 
-private class FailedTestNode(
+internal class FailedTestNode(
     val build: RememberedTeamCityBuild,
     val test: FailedTest,
 ) : DefaultMutableTreeNode(test.displayName) {
     override fun isLeaf(): Boolean = true
 }
 
-private class FailedTestClassNode(
+internal class FailedTestClassNode(
     val build: RememberedTeamCityBuild,
     val classFqName: String,
     val testCount: Int,
@@ -138,7 +138,7 @@ private class FailedTestClassNode(
     override fun isLeaf(): Boolean = false
 }
 
-private class MoreFailedTestsNode(
+internal class MoreFailedTestsNode(
     val build: RememberedTeamCityBuild,
     val count: Int,
 ) : DefaultMutableTreeNode(count) {
@@ -250,8 +250,9 @@ private class RemoteRunToolWindowPanel(
         tree.putClientProperty(AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)
         ToolTipManager.sharedInstance().registerComponent(tree)
 
-        /* Right-clicking a row selects it first, so the popup actions apply to the clicked row. Every
-           node type gets its own menu with only the actions that apply to it. */
+        /* Right-clicking a row selects it first, so the popup actions apply to the clicked row, but
+           right-clicking inside a multi-selection keeps it. Every node type gets its own menu with
+           only the actions that apply to it. */
         val branchPopupMenu = createPopupMenu(
             LaunchSelectedBranchAction(),
             LaunchSafeMergeDryRunAction(),
@@ -300,7 +301,7 @@ private class RemoteRunToolWindowPanel(
         tree.addMouseListener(object : PopupHandler() {
             override fun invokePopup(component: Component, x: Int, y: Int) {
                 val clickedPath = treePathForContextMenuAt(tree, x, y) ?: return
-                tree.selectionPath = clickedPath
+                selectForContextMenu(tree, clickedPath)
 
                 when (clickedPath.lastPathComponent) {
                     is BranchNode -> branchPopupMenu.show(component, x, y)
@@ -518,8 +519,9 @@ private class RemoteRunToolWindowPanel(
 
         val selectedBuildId = selectedBuild()?.buildId
         val selectedBranchName = selectedBranchName()
-        val selectedFailedTest = selectedFailedTest()?.let { node -> node.build.buildId to node.test }
-        val selectedFailedTestClass = selectedFailedTestClass()?.let { node -> node.build.buildId to node.classFqName }
+        val selectedFailedTests = selectedFailedTestNodes().map { node -> node.build.buildId to node.test }
+        val selectedFailedTestClasses =
+            selectedFailedTestClassNodes().map { node -> node.build.buildId to node.classFqName }
         val expandedBuildIds = branchNodes().flatMap { branchNode ->
             branchNode.children().toList().filterIsInstance<BuildNode>()
                 .filter { buildNode -> tree.isExpanded(TreePath(buildNode.path)) }
@@ -567,7 +569,7 @@ private class RemoteRunToolWindowPanel(
             }
         }
 
-        restoreSelection(selectedBuildId, selectedBranchName, selectedFailedTest, selectedFailedTestClass)
+        restoreSelection(selectedBuildId, selectedBranchName, selectedFailedTests, selectedFailedTestClasses)
     }
 
     private fun branchNodes(): List<BranchNode> {
@@ -583,28 +585,42 @@ private class RemoteRunToolWindowPanel(
             )
         }
 
+    /**
+     * Restores the selection after a rebuild: every selected failed test and failed test class that
+     * still exists — falling back to the selected build row, then the selected branch.
+     */
     private fun restoreSelection(
         selectedBuildId: String?,
         selectedBranchName: String?,
-        selectedFailedTest: Pair<String, FailedTest>?,
-        selectedFailedTestClass: Pair<String, String>?,
+        selectedFailedTests: List<Pair<String, FailedTest>>,
+        selectedFailedTestClasses: List<Pair<String, String>>,
     ) {
+        val restoredTestNodes = selectedFailedTests.mapNotNull { (buildId, test) -> failedTestNode(buildId, test) }
+        val restoredClassNodes =
+            selectedFailedTestClasses.mapNotNull { (buildId, classFqName) -> failedTestClassNode(buildId, classFqName) }
+        val restoredNodes = (restoredTestNodes + restoredClassNodes).distinct()
+        if (restoredNodes.isNotEmpty()) {
+            tree.selectionPaths = restoredNodes.map { node -> TreePath(node.path) }.toTypedArray()
+            return
+        }
+
         val branchNode = branchNodes().firstOrNull { node -> node.branchName == selectedBranchName } ?: return
         val buildNode = branchNode.children().toList()
             .filterIsInstance<BuildNode>()
             .firstOrNull { node -> node.build.buildId == selectedBuildId }
-        val selectedTestNode = selectedFailedTest
-            ?.takeIf { (buildId, _) -> buildNode?.build?.buildId == buildId }
-            ?.let { (_, test) -> buildNode?.let(::failedTestNodes)?.firstOrNull { node -> node.test == test } }
-        val selectedClassNode = selectedFailedTestClass
-            ?.takeIf { (buildId, _) -> buildNode?.build?.buildId == buildId }
-            ?.let { (_, classFqName) ->
-                buildNode?.children()?.toList()?.filterIsInstance<FailedTestClassNode>()
-                    ?.firstOrNull { node -> node.classFqName == classFqName }
-            }
-
-        tree.selectionPath = TreePath((selectedTestNode ?: selectedClassNode ?: buildNode ?: branchNode).path)
+        tree.selectionPath = TreePath((buildNode ?: branchNode).path)
     }
+
+    private fun failedTestNode(buildId: String, test: FailedTest): FailedTestNode? =
+        buildNode(buildId)?.let { build -> failedTestNodes(build).firstOrNull { node -> node.test == test } }
+
+    private fun failedTestClassNode(buildId: String, classFqName: String): FailedTestClassNode? =
+        buildNode(buildId)?.children()?.toList()?.filterIsInstance<FailedTestClassNode>()
+            ?.firstOrNull { node -> node.classFqName == classFqName }
+
+    private fun buildNode(buildId: String): BuildNode? =
+        branchNodes().flatMap { branchNode -> branchNode.children().toList().filterIsInstance<BuildNode>() }
+            .firstOrNull { node -> node.build.buildId == buildId }
 
     private fun failedTestNodes(buildNode: BuildNode): List<FailedTestNode> =
         buildNode.children().toList().flatMap { node ->
@@ -712,6 +728,12 @@ private class RemoteRunToolWindowPanel(
 
     private fun selectedFailedTestClass(): FailedTestClassNode? =
         tree.selectionPath?.lastPathComponent as? FailedTestClassNode
+
+    private fun selectedFailedTestNodes(): List<FailedTestNode> =
+        tree.selectionPaths.orEmpty().mapNotNull { path -> path.lastPathComponent as? FailedTestNode }
+
+    private fun selectedFailedTestClassNodes(): List<FailedTestClassNode> =
+        tree.selectionPaths.orEmpty().mapNotNull { path -> path.lastPathComponent as? FailedTestClassNode }
 
     /* Toolbar action: always launches the aggregate run for the checked out branch. */
     @Suppress("DialogTitleCapitalization")
@@ -881,8 +903,7 @@ private class RemoteRunToolWindowPanel(
         executor.icon,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
-            val failedTestNode = selectedFailedTest() ?: return
-            listOf(failedTestNode.test).runLocally(executor)
+            failedTestsInSelection(tree).runLocally(executor)
         }
     }
 
@@ -903,9 +924,7 @@ private class RemoteRunToolWindowPanel(
         executor.icon,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
-            val failedTestClassNode = selectedFailedTestClass() ?: return
-            val failedTests = failedTestClassNode.children().toList().filterIsInstance<FailedTestNode>().map { it.test }
-            failedTests.runLocally(executor)
+            failedTestsInSelection(tree).runLocally(executor)
         }
     }
 
@@ -977,10 +996,10 @@ private class RemoteRunToolWindowPanel(
         executor.icon,
     ) {
         override fun actionPerformed(e: AnActionEvent) {
-            val build = selectedBuild() ?: return
             val service = project.getServiceIfCreated(TeamCityBuildStatusService::class.java) ?: return
-            val failedTests = service.failedTests(build.buildId) ?: return
-            failedTests.tests.runLocally(executor)
+            selectedBuildsInSelection(tree)
+                .flatMap { build -> service.failedTests(build.buildId)?.tests.orEmpty() }
+                .runLocally(executor)
         }
     }
 
@@ -988,6 +1007,8 @@ private class RemoteRunToolWindowPanel(
      * NB: [MAX_FAILED_TESTS] limits the number of tests it's possible to rerun locally.
      */
     private fun List<FailedTest>.runLocally(executor: Executor) {
+        if (isEmpty()) return
+
         val fqTests = mapNotNullTo(mutableSetOf(), ::failedTestFqName)
         val workingDirectory = project.basePath
             ?: return project.toast("Failed to get the project working directory", MessageType.ERROR)
@@ -1351,6 +1372,46 @@ internal fun treePathForContextMenuAt(tree: JTree, x: Int, y: Int): TreePath? {
 
     return path.takeIf { y >= rowBounds.y && y < rowBounds.y + rowBounds.height }
 }
+
+/**
+ * Right-clicking a row selects it first, so the popup actions apply to the clicked row; right-clicking
+ * inside an existing multi-selection keeps it. Either way, the clicked row becomes the first selected
+ * path, which is what the actions that handle a single node apply to.
+ */
+internal fun selectForContextMenu(tree: JTree, clickedPath: TreePath) {
+    if (!tree.isPathSelected(clickedPath)) {
+        tree.selectionPath = clickedPath
+        return
+    }
+
+    val otherSelectedPaths = tree.selectionPaths.orEmpty().filter { it != clickedPath }
+    tree.selectionPaths = arrayOf(clickedPath) + otherSelectedPaths
+}
+
+/**
+ * The failed tests covered by the selection: a failed-test row contributes itself, a failed-test
+ * class row contributes every test listed under it. Rows of other kinds contribute nothing.
+ */
+internal fun failedTestsInSelection(tree: JTree): List<FailedTest> =
+    tree.selectionPaths.orEmpty().flatMap { path ->
+        when (val node = path.lastPathComponent) {
+            is FailedTestNode -> listOf(node.test)
+            is FailedTestClassNode -> node.children().toList().filterIsInstance<FailedTestNode>().map { it.test }
+            else -> emptyList()
+        }
+    }
+
+/**
+ * The builds of the selected build and "more failed tests" rows, without duplicates.
+ */
+internal fun selectedBuildsInSelection(tree: JTree): List<RememberedTeamCityBuild> =
+    tree.selectionPaths.orEmpty().mapNotNull { path ->
+        when (val node = path.lastPathComponent) {
+            is BuildNode -> node.build
+            is MoreFailedTestsNode -> node.build
+            else -> null
+        }
+    }.distinct()
 
 /**
  * The status shown next to a branch icon, summarizing the branch's latest run.
