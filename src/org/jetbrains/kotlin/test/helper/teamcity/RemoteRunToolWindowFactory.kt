@@ -12,6 +12,7 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.*
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.MessageDialogBuilder
 import com.intellij.openapi.ui.MessageType
@@ -65,7 +66,7 @@ import javax.swing.tree.TreePath
 /**
  * The Remote Run tool window is only offered in Kotlin monorepo projects.
  */
-class RemoteRunToolWindowFactory : ToolWindowFactory {
+class RemoteRunToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun shouldBeAvailable(project: Project): Boolean = project.kotlinMonorepoRepository() != null
 
     /**
@@ -421,7 +422,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.expand.all.text"),
         MyBundle.message("teamcity.toolwindow.expand.all.description"),
         AllIcons.Actions.Expandall,
-    ) {
+    ), DumbAware {
         override fun actionPerformed(e: AnActionEvent) {
             branchExpansionState.expandBranches(branchTreePaths())
         }
@@ -431,7 +432,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.collapse.all.text"),
         MyBundle.message("teamcity.toolwindow.collapse.all.description"),
         AllIcons.Actions.Collapseall,
-    ) {
+    ), DumbAware {
         override fun actionPerformed(e: AnActionEvent) {
             branchExpansionState.collapseBranches(branchTreePaths())
         }
@@ -718,7 +719,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.launch.text"),
         MyBundle.message("teamcity.toolwindow.launch.description"),
         AllIcons.Actions.Execute,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
@@ -750,7 +751,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.launch.text"),
         MyBundle.message("teamcity.toolwindow.launch.selected.description"),
         AllIcons.Actions.Execute,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
@@ -772,7 +773,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.safe.merge.dry.run.text"),
         MyBundle.message("teamcity.toolwindow.safe.merge.dry.run.description"),
         AllIcons.Actions.Execute,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
@@ -794,7 +795,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.refresh.branch.text"),
         MyBundle.message("teamcity.toolwindow.refresh.branch.description"),
         AllIcons.Actions.Refresh,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         /* Disabled while a fetch is in flight: the service has no re-entrancy guard. */
@@ -815,7 +816,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.stop.text"),
         MyBundle.message("teamcity.toolwindow.stop.description"),
         AllIcons.Actions.Suspend,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         /* Only unfinished builds can be stopped, so finished ones do not offer the action at all. */
@@ -843,7 +844,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.refresh.text"),
         MyBundle.message("teamcity.toolwindow.refresh.description"),
         AllIcons.Actions.Refresh,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         /* While a fetch round is running, the button ignores clicks and its glyph becomes the spinner. The
@@ -912,7 +913,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.open.text"),
         MyBundle.message("teamcity.toolwindow.open.description"),
         AllIcons.General.Export,
-    ) {
+    ), DumbAware {
         override fun actionPerformed(e: AnActionEvent) {
             val build = selectedBuild() ?: return
             BrowserUtil.browse(build.webUrl)
@@ -924,7 +925,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.open.pull.request.text"),
         MyBundle.message("teamcity.toolwindow.open.pull.request.description"),
         AllIcons.Vcs.Vendors.Github,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         /* Only branches with a pull request offer the action at all. */
@@ -948,7 +949,7 @@ private class RemoteRunToolWindowPanel(
         text: String,
         description: String,
         icon: Icon,
-    ) : AnAction(text, description, icon) {
+    ) : AnAction(text, description, icon), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         /* Disabled while the same command is on its way to the pull request. */
@@ -999,7 +1000,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.remove.text"),
         MyBundle.message("teamcity.toolwindow.remove.description"),
         null,
-    ) {
+    ), DumbAware {
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
         override fun update(e: AnActionEvent) {
