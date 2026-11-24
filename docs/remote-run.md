@@ -33,9 +33,11 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
 - Expand a failed build to list its failed tests; double-click a test or use its context menu's "Navigate to Test"
   action to open it in the editor when its source is found. If the source cannot be found, no navigation occurs.
   The test context menu can also "Run Test Locally"; a failed-test class row's context menu offers "Navigate to
-  Class" and "Run Failed Tests of This Class Locally".
+  Class" and "Run Failed Tests of This Class Locally". Test, class and build rows can be multi-selected
+  (Ctrl/Cmd-click); right-clicking inside the selection keeps it, and the "Run … Locally" actions then run the
+  failed tests covered by the selection.
 - The build context menu offers stopping unfinished builds, opening the build on TeamCity, removing remembered
-  launches from the list and "Run Failed Tests Locally" for all fetched failed tests of the build.
+  launches from the list and "Run Failed Tests Locally" for all fetched failed tests of the selected builds.
 - The "Run … Locally" actions re-run the selected failed tests with Gradle against the checked out working tree,
   through the Run executor. A test is looked up by its TeamCity name (package, class, method) in the open project
   and must exist there with a `@org.jetbrains.kotlin.test.TestMetadata` annotation to run; tests that cannot be
@@ -209,10 +211,11 @@ bot's `/cancel-coordinator` command cancels the merge coordinator running for th
 
 The "Run … Locally" context-menu actions share the launcher of the `testGlobally` Run Anything command:
 
-1. The failed tests to run are collected: all fetched failed tests for a build row, the tests listed under a
-   failed-test class row, or the single selected test. Their TeamCity names (package, class, method) are turned
-   into fully qualified references (`FailedTests.kt` → `failedTestFqName`); if none can be built, a toast says so
-   and nothing runs.
+1. The failed tests to run are collected from the selection: a failed-test row contributes itself, a
+   failed-test class row contributes the tests listed under it, and a build row contributes all its fetched
+   failed tests; right-clicking inside a multi-selection keeps it. Their TeamCity names (package, class, method)
+   are turned into fully qualified references (`FailedTests.kt` → `failedTestFqName`); if none can be built, a
+   toast says so and nothing runs.
 2. `findAndLaunchTestsByFqReferences` (`runAnything/TestGloballyRunAnythingProvider.kt`) looks each reference up
    in the open project with `JavaPsiFacade`, keeps methods annotated `@org.jetbrains.kotlin.test.TestMetadata` and
    maps them to Gradle test tasks with `--tests` filters (`gradle/computeGradleCommandLine.kt`); a single test runs
