@@ -15,6 +15,9 @@
   GitHub plugin, at most once a minute. The GitHub requests — also of the safe-merge pull-request resolution —
   authenticate with the GitHub account configured in the IDE, which GitHub's GraphQL API effectively requires. See
   [docs/remote-run.md](docs/remote-run.md).
+- Add "Open Pull Request in IDE" next to "Open Pull Request" in the branch context menu of the "Remote Run" tool
+  window: it opens the branch's open or merged pull request in the GitHub integration's "Pull requests" tool window,
+  and is hidden when the GitHub integration is not installed or not configured.
 - Show the code owners review of a branch's open `JetBrains/kotlin` pull request next to its GitHub logo in the
   "Remote Run" tool window, as the `kotlin-safemerge` bot reports it in its "Code Owners" comment: changes requested,
   awaiting review, missing reviewer, approved, or a red cross when the comment is missing. Hovering the icon lists who

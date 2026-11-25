@@ -1,7 +1,9 @@
 package org.jetbrains.kotlin.test.helper.github
 
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 import java.net.URLEncoder
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.jetbrains.plugins.github.GithubIcons
 import org.jetbrains.plugins.github.api.GHRepositoryCoordinates
 import org.jetbrains.plugins.github.api.GHRepositoryPath
@@ -14,9 +16,12 @@ import org.jetbrains.plugins.github.api.GithubServerPath
 import org.jetbrains.plugins.github.api.data.GithubIssueState
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequest
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestRestIdOnly
+import org.jetbrains.plugins.github.api.data.pullrequest.toPRIdentifier
 import org.jetbrains.plugins.github.api.executeSuspend
 import org.jetbrains.plugins.github.authentication.GHAccountsUtil
 import org.jetbrains.plugins.github.authentication.accounts.GHAccountManager
+import org.jetbrains.plugins.github.pullrequest.ui.GHPRProjectViewModel
+import org.jetbrains.plugins.github.util.GHHostedRepositoriesManager
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -135,6 +140,55 @@ internal class DefaultGitHubPullRequestSource : GitHubPullRequestSource {
         }
     }
 
+    /**
+     * The GitHub plugin's tool window only serves projects whose repository it knows and whose
+     * account is logged in; the Kotlin repository counts on GitHub alone. A broken GitHub plugin —
+     * whose internals the opening relies on — must not break the Remote Run popup, so it hides
+     * instead.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun isPullRequestToolWindowAvailable(project: Project): Boolean = try {
+        GHAccountsUtil.accounts.any { account -> account.server.isGithubDotCom } &&
+            project.service<GHHostedRepositoriesManager>().knownRepositoriesState.value
+                .any { mapping -> mapping.repository == kotlinRepositoryCoordinates }
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (_: Throwable) {
+        false
+    }
+
+    /**
+     * The tool window offers no public API: `GHPRProjectViewModel` and `GHPRConnectedProjectViewModel`
+     * are `@ApiStatus.Internal1`, and this is the only way to open a pull request in it, so their use
+     * here is deliberate (the action is hidden without the GitHub integration anyway).
+     */
+    override suspend fun openPullRequestInToolWindow(
+        project: Project,
+        pullRequest: BranchPullRequest,
+    ): OpenPullRequestInToolWindowResult = try {
+        /* The tool window identifies pull requests by their GraphQL node id, which the Remote Run
+           tree does not keep, so it is read from the pull request alone. */
+        val connection = connectToKotlinRepository()
+        val restPullRequest = connection.executor
+            .executeSuspend(GithubApiRequest.Get.json<GHPullRequestRestIdOnly>(githubPullRequestUrl(connection.apiUrl, pullRequest.number)))
+        val pullRequestIdentifier = restPullRequest.toPRIdentifier()
+
+        val projectViewModel = project.service<GHPRProjectViewModel>()
+        projectViewModel.loginIfPossible()
+        projectViewModel.activateAndAwaitProject {
+            /* The tool window may be connected to another repository, whose pull request of the
+               same number is not this one. */
+            if (repository == kotlinRepositoryCoordinates) {
+                viewPullRequest(pullRequestIdentifier)
+            }
+        }
+        OpenPullRequestInToolWindowResult.Opened
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (exception: Throwable) {
+        OpenPullRequestInToolWindowResult.Failed(exception.message ?: "Opening the pull request in the tool window failed")
+    }
+
     private suspend fun connectToKotlinRepository(): KotlinRepositoryConnection {
         val account = GHAccountsUtil.accounts.firstOrNull { it.server.isGithubDotCom }
         val executorFactory = GithubApiRequestExecutor.Factory.getInstance()
@@ -161,6 +215,15 @@ private class KotlinRepositoryConnection(
     val apiUrl: String get() = repository.serverPath.toApiUrl()
 }
 
+/**
+ * The `JetBrains/kotlin` repository on GitHub, whose pull requests both the "Pull requests" tool
+ * window and the pull request reading deal with.
+ */
+private val kotlinRepositoryCoordinates = GHRepositoryCoordinates(
+    GithubServerPath(GITHUB_URL),
+    GHRepositoryPath(GITHUB_KOTLIN_REPOSITORY_OWNER, GITHUB_KOTLIN_REPOSITORY_NAME),
+)
+
 private class RawJsonPage(val body: String, val nextPageUrl: String?)
 
 /**
@@ -180,6 +243,13 @@ internal fun githubPullRequestsListingUrl(apiUrl: String, branchName: String): S
     val encodedHead = URLEncoder.encode("$GITHUB_KOTLIN_REPOSITORY_OWNER:$branchName", Charsets.UTF_8)
     return "$apiUrl/repos/$GITHUB_KOTLIN_REPOSITORY/pulls?state=${GithubIssueState.open}&head=$encodedHead"
 }
+
+/**
+ * Reads one pull request of the `JetBrains/kotlin` repository, which the GitHub plugin maps together
+ * with its identifier.
+ */
+internal fun githubPullRequestUrl(apiUrl: String, pullRequestNumber: Long): String =
+    "$apiUrl/repos/$GITHUB_KOTLIN_REPOSITORY/pulls/$pullRequestNumber"
 
 /**
  * Lists the pull requests of every state with [branchName] as head, newest first.
