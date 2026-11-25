@@ -1,5 +1,7 @@
 package org.jetbrains.kotlin.test.helper.github
 
+import java.net.URLEncoder
+
 internal const val GITHUB_URL: String = "github.com"
 internal const val GITHUB_KOTLIN_REPOSITORY_OWNER: String = "JetBrains"
 internal const val GITHUB_KOTLIN_REPOSITORY_NAME: String = "kotlin"
@@ -9,6 +11,18 @@ internal const val GITHUB_KOTLIN_REPOSITORY: String = "$GITHUB_KOTLIN_REPOSITORY
  * The web URL of a `JetBrains/kotlin` pull request; a pull request with any other URL is a malformed answer.
  */
 internal fun kotlinPullRequestUrl(number: Long): String = "https://$GITHUB_URL/$GITHUB_KOTLIN_REPOSITORY/pull/$number"
+
+/**
+ * The web URL of the GitHub compare page that creates a `JetBrains/kotlin` pull request for
+ * [branchName]; `master` is the repository's default branch. Slashes stay literal, like in the
+ * compare URLs of branches with a slash in their name, everything else is percent-encoded.
+ */
+internal fun kotlinPullRequestCompareUrl(branchName: String): String {
+    val encodedBranchName = URLEncoder.encode(branchName, Charsets.UTF_8)
+        .replace("+", "%20")
+        .replace("%2F", "/")
+    return "https://$GITHUB_URL/$GITHUB_KOTLIN_REPOSITORY/compare/master...$encodedBranchName"
+}
 
 internal data class OpenKotlinPullRequest(val url: String, val headSha: String, val number: Long)
 

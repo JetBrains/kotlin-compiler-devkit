@@ -258,6 +258,7 @@ private class RemoteRunToolWindowPanel(
             LaunchSafeMergeDryRunAction(),
             OpenPullRequestAction(),
             OpenPullRequestInIdeAction(),
+            CreatePullRequestAction(),
             SafeMergeBotCommandAction(
                 SafeMergeBotCommand.SAFE_MERGE,
                 MyBundle.message("teamcity.toolwindow.bot.safe.merge.text"),
@@ -993,6 +994,28 @@ private class RemoteRunToolWindowPanel(
                     )
                 }
             }
+        }
+    }
+
+    /* Context menu action: opens the GitHub compare page that creates a pull request for the
+       right-clicked branch. */
+    private inner class CreatePullRequestAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.create.pull.request.text"),
+        MyBundle.message("teamcity.toolwindow.create.pull.request.description"),
+        AllIcons.Vcs.Vendors.Github,
+    ), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        /* Only branches without an open or merged pull request offer the action; a merged pull
+           request leaves nothing to compare against master. */
+        override fun update(e: AnActionEvent) {
+            val branchNode = selectedBranchNode()
+            e.presentation.isVisible = branchNode != null && branchNode.pullRequest == null
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val branchName = selectedBranchName() ?: return
+            BrowserUtil.browse(kotlinPullRequestCompareUrl(branchName))
         }
     }
 
