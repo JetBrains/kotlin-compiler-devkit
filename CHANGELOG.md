@@ -18,6 +18,9 @@
 - Add "Open Pull Request in IDE" next to "Open Pull Request" in the branch context menu of the "Remote Run" tool
   window: it opens the branch's open or merged pull request in the GitHub integration's "Pull requests" tool window,
   and is hidden when the GitHub integration is not installed or not configured.
+- Add "Create Pull Request" to the branch context menu of the "Remote Run" tool window for branches the GitHub
+  integration resolved without an open or merged `JetBrains/kotlin` pull request: it opens the GitHub compare page
+  that creates the pull request for the branch.
 - Show the code owners review of a branch's open `JetBrains/kotlin` pull request next to its GitHub logo in the
   "Remote Run" tool window, as the `kotlin-safemerge` bot reports it in its "Code Owners" comment: changes requested,
   awaiting review, missing reviewer, approved, or a red cross when the comment is missing. Hovering the icon lists who

@@ -164,6 +164,22 @@ class GitHubPullRequestListingTest {
         )
     }
 
+    @Test
+    fun readsTheCompareUrlOfABranchWithoutAPullRequest() {
+        assertEquals(
+            "https://github.com/JetBrains/kotlin/compare/master...rr/alice/KT-12345",
+            kotlinPullRequestCompareUrl("rr/alice/KT-12345"),
+        )
+    }
+
+    @Test
+    fun percentEncodesSpecialCharactersOfTheCompareUrlBranch() {
+        assertEquals(
+            "https://github.com/JetBrains/kotlin/compare/master...fix%23123",
+            kotlinPullRequestCompareUrl("fix#123"),
+        )
+    }
+
     private fun noRead(number: Long): OpenKotlinPullRequestResult = fail("Pull request #$number must not be read")
 
     private fun listedPullRequests(vararg pullRequests: String): List<ListedPullRequest> =
