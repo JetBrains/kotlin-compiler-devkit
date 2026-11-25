@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.test.helper.github
 
 import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.openapi.project.Project
 import javax.swing.Icon
 
 internal interface GitHubPullRequestSource {
@@ -27,6 +28,20 @@ internal interface GitHubPullRequestSource {
      */
     suspend fun findCodeOwnersReview(pullRequest: OpenKotlinPullRequest): CodeOwnersReviewResult =
         CodeOwnersReviewResult.Failed("Reading the code owners review is not supported")
+
+    /**
+     * Whether the GitHub plugin's "Pull requests" tool window is installed and configured, so a pull
+     * request of the `JetBrains/kotlin` repository can be opened in it.
+     */
+    fun isPullRequestToolWindowAvailable(project: Project): Boolean = false
+
+    /**
+     * Opens [pullRequest] in the GitHub plugin's "Pull requests" tool window.
+     */
+    suspend fun openPullRequestInToolWindow(
+        project: Project,
+        pullRequest: BranchPullRequest,
+    ): OpenPullRequestInToolWindowResult
 }
 
 /**
@@ -57,6 +72,24 @@ internal suspend fun findKotlinCodeOwnersReview(pullRequest: OpenKotlinPullReque
 
 internal fun githubPullRequestIcon(): Icon? =
     GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.pullRequestIcon
+
+/**
+ * Whether the GitHub plugin's "Pull requests" tool window can open the Kotlin pull requests of this
+ * project; without the GitHub integration plugin it cannot.
+ */
+internal fun canOpenKotlinPullRequestInToolWindow(project: Project): Boolean =
+    GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.isPullRequestToolWindowAvailable(project) ?: false
+
+/**
+ * Opens a branch's pull request in the GitHub plugin's "Pull requests" tool window, which, like
+ * [findOpenKotlinPullRequest], only the GitHub integration can.
+ */
+internal suspend fun openKotlinPullRequestInToolWindow(
+    project: Project,
+    pullRequest: BranchPullRequest,
+): OpenPullRequestInToolWindowResult =
+    GITHUB_PULL_REQUEST_SOURCE_EP.extensionList.firstOrNull()?.openPullRequestInToolWindow(project, pullRequest)
+        ?: OpenPullRequestInToolWindowResult.Failed("The GitHub integration plugin is not available")
 
 private val GITHUB_PULL_REQUEST_SOURCE_EP = ExtensionPointName<GitHubPullRequestSource>(
     "org.jetbrains.kotlin.compiler.devkit.githubPullRequestSource"

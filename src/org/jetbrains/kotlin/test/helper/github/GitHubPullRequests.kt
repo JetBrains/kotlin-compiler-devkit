@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.test.helper.github
 
+internal const val GITHUB_URL: String = "github.com"
 internal const val GITHUB_KOTLIN_REPOSITORY_OWNER: String = "JetBrains"
 internal const val GITHUB_KOTLIN_REPOSITORY_NAME: String = "kotlin"
 internal const val GITHUB_KOTLIN_REPOSITORY: String = "$GITHUB_KOTLIN_REPOSITORY_OWNER/$GITHUB_KOTLIN_REPOSITORY_NAME"
@@ -7,7 +8,7 @@ internal const val GITHUB_KOTLIN_REPOSITORY: String = "$GITHUB_KOTLIN_REPOSITORY
 /**
  * The web URL of a `JetBrains/kotlin` pull request; a pull request with any other URL is a malformed answer.
  */
-internal fun kotlinPullRequestUrl(number: Long): String = "https://github.com/$GITHUB_KOTLIN_REPOSITORY/pull/$number"
+internal fun kotlinPullRequestUrl(number: Long): String = "https://$GITHUB_URL/$GITHUB_KOTLIN_REPOSITORY/pull/$number"
 
 internal data class OpenKotlinPullRequest(val url: String, val headSha: String, val number: Long)
 
@@ -54,6 +55,8 @@ internal fun OpenKotlinPullRequestResult.toBranchPullRequestResult(): BranchPull
 internal sealed interface BranchPullRequest {
     val url: String
 
+    val number: Long
+
     /**
      * The open pull request of the branch with its code owners review, which is null until it could
      * be read once.
@@ -63,6 +66,8 @@ internal sealed interface BranchPullRequest {
         val codeOwnersReview: CodeOwnersReview?,
     ) : BranchPullRequest {
         override val url: String get() = pullRequest.url
+
+        override val number: Long get() = pullRequest.number
     }
 
     /**
@@ -70,7 +75,22 @@ internal sealed interface BranchPullRequest {
      */
     data class Merged(val pullRequest: MergedKotlinPullRequest) : BranchPullRequest {
         override val url: String get() = pullRequest.url
+
+        override val number: Long get() = pullRequest.number
     }
+}
+
+/**
+ * The outcome of opening a branch's pull request in the GitHub plugin's "Pull requests" tool window.
+ */
+internal sealed interface OpenPullRequestInToolWindowResult {
+    /**
+     * The pull request was resolved and its opening in the tool window was scheduled; connecting the
+     * tool window may still ask for a repository and an account first.
+     */
+    data object Opened : OpenPullRequestInToolWindowResult
+
+    data class Failed(val message: String) : OpenPullRequestInToolWindowResult
 }
 
 internal sealed interface CodeOwnersReviewResult {

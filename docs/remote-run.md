@@ -48,8 +48,11 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   recently checked out ones are fetched only that way. Branches with unfinished launched safe merges keep being
   refreshed automatically.
 - A branch with an open or merged pull request in `JetBrains/kotlin` shows the GitHub logo to the right of its name; its
-  context menu offers "Open Pull Request" to open it in the browser. The pull request of every listed branch is
-  resolved when the tool window becomes visible and on **Refresh**, at most once a minute.
+  context menu offers "Open Pull Request" to open it in the browser and "Open Pull Request in IDE" to open it in the
+  GitHub plugin's "Pull requests" tool window; the latter is hidden until the GitHub integration is installed and
+  configured, that is, an account is logged in and the project knows the `JetBrains/kotlin` repository on GitHub. The
+  pull request of every listed branch is resolved when the tool window becomes visible and on **Refresh**, at most once
+  a minute.
 - Next to the GitHub logo, a status icon shows the pull request's code owners review, as the `kotlin-safemerge` bot
   reports it in its "Code Owners" comment. The first status that applies wins:
   - red circle: a code owner requested changes;

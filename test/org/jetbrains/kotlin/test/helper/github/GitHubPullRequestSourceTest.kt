@@ -63,6 +63,13 @@ class GitHubPullRequestSourceTest : BasePlatformTestCase() {
         )
     }
 
+    fun testPullRequestUrlReadsTheSinglePullRequest() {
+        assertEquals(
+            "https://api.github.com/repos/JetBrains/kotlin/pulls/42",
+            githubPullRequestUrl("https://api.github.com", 42),
+        )
+    }
+
     fun testAMissingPullRequestIsAnInvalidResponse() {
         assertEquals(OpenKotlinPullRequestResult.InvalidResponse, null.toOpenKotlinPullRequestResult("any"))
     }

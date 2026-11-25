@@ -257,6 +257,7 @@ private class RemoteRunToolWindowPanel(
             LaunchSelectedBranchAction(),
             LaunchSafeMergeDryRunAction(),
             OpenPullRequestAction(),
+            OpenPullRequestInIdeAction(),
             SafeMergeBotCommandAction(
                 SafeMergeBotCommand.SAFE_MERGE,
                 MyBundle.message("teamcity.toolwindow.bot.safe.merge.text"),
@@ -955,6 +956,43 @@ private class RemoteRunToolWindowPanel(
         override fun actionPerformed(e: AnActionEvent) {
             val pullRequestUrl = selectedBranchNode()?.pullRequest?.url ?: return
             BrowserUtil.browse(pullRequestUrl)
+        }
+    }
+
+    /* Context menu action: opens the open or merged pull request of the right-clicked branch in the
+       GitHub plugin's "Pull requests" tool window. */
+    private inner class OpenPullRequestInIdeAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.open.pull.request.in.ide.text"),
+        MyBundle.message("teamcity.toolwindow.open.pull.request.in.ide.description"),
+        AllIcons.Vcs.Vendors.Github,
+    ), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        /* Only branches with a pull request and a configured GitHub integration offer the action. */
+        override fun update(e: AnActionEvent) {
+            e.presentation.isVisible = selectedBranchNode()?.pullRequest != null && canOpenKotlinPullRequestInToolWindow(project)
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val pullRequest = selectedBranchNode()?.pullRequest ?: return
+            val modalityState = ModalityState.current()
+
+            /* The tool window opens the pull request in its own coroutine, so the click only waits
+               for resolving it. */
+            navigationScope.launch(modalityState.asContextElement()) {
+                when (val result = openKotlinPullRequestInToolWindow(project, pullRequest)) {
+                    OpenPullRequestInToolWindowResult.Opened -> {}
+
+                    is OpenPullRequestInToolWindowResult.Failed -> project.toast(
+                        MyBundle.message(
+                            "teamcity.toolwindow.open.pull.request.in.ide.failed",
+                            pullRequest.number,
+                            StringUtil.escapeXmlEntities(result.message),
+                        ),
+                        MessageType.ERROR,
+                    )
+                }
+            }
         }
     }
 
