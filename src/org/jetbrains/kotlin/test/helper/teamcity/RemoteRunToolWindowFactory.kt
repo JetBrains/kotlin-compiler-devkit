@@ -1004,7 +1004,7 @@ private class RemoteRunToolWindowPanel(
         MyBundle.message("teamcity.toolwindow.create.pull.request.description"),
         AllIcons.Vcs.Vendors.Github,
     ), DumbAware {
-        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+        override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
         /* Only branches without an open or merged pull request offer the action; a merged pull
            request leaves nothing to compare against master. */
