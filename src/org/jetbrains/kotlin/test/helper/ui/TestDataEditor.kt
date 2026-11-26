@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.test.helper.ui
 
 import com.intellij.codeHighlighting.BackgroundEditorHighlighter
+import com.intellij.codeInsight.hints.JavaTypeHintsPresentationFactory.Companion.presentation
 import com.intellij.execution.ExecutionListener
 import com.intellij.execution.ExecutionManager
 import com.intellij.execution.process.ProcessHandler
@@ -10,6 +11,7 @@ import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.VisibleAreaEvent
@@ -30,6 +32,7 @@ import com.intellij.ui.JBSplitter
 import com.intellij.util.SingleAlarm
 import com.intellij.util.messages.Topic
 import com.intellij.util.ui.JBUI
+import org.jetbrains.kotlin.idea.gradleTooling.get
 import org.jetbrains.kotlin.test.helper.actions.ChooseAdditionalFileAction
 import org.jetbrains.kotlin.test.helper.actions.GeneratedTestComboBoxAction
 import org.jetbrains.kotlin.test.helper.allExtensions
@@ -277,8 +280,8 @@ class TestDataEditor(
             ) = generatedTestComboBoxAction.state.updateTestsList()
         })
 
-        return ActionManager
-            .getInstance()
+        val actionManager = ActionManager.getInstance()
+        return actionManager
             .createActionToolbar(
                 "TestDataHelperToolbar_right",
                 DefaultActionGroup(
@@ -286,8 +289,19 @@ class TestDataEditor(
                     generatedTestComboBoxAction.runAction,
                     generatedTestComboBoxAction.debugAction,
                     generatedTestComboBoxAction.runAndApply,
+                    object: AnActionWrapper(actionManager.getAction("TestDataRunAllTests")) {
+                        override fun update(e: AnActionEvent) {
+                            super.update(e)
+                            e.presentation.icon = AllIcons.RunConfigurations.Junit
+                        }
+                    },
+                    object: ActionGroupWrapper(actionManager.getAction("TestDataManagerGroup") as ActionGroup) {
+                        override fun update(e: AnActionEvent) {
+                            super.update(e)
+                            e.presentation.isVisible = true
+                        }
+                    },
                     generatedTestComboBoxAction.goToAction,
-                    generatedTestComboBoxAction.runAllTestsAction,
                     generatedTestComboBoxAction.moreActionsGroup
                 ),
                 true

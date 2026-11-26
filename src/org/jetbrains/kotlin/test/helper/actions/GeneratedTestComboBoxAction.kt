@@ -5,11 +5,7 @@ import com.intellij.designer.actions.AbstractComboBoxAction
 import com.intellij.execution.Location
 import com.intellij.execution.PsiLocation
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.actionSystem.ActionGroup
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.Presentation
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.EDT
@@ -32,15 +28,10 @@ import com.intellij.ui.util.minimumWidth
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.buildRunnerLabel
-import org.jetbrains.kotlin.test.helper.gradle.GradleRunConfig
-import org.jetbrains.kotlin.test.helper.gradle.generateTestsAndWait
-import org.jetbrains.kotlin.test.helper.gradle.generateTestsCommandLine
-import org.jetbrains.kotlin.test.helper.gradle.hasGradleTestRunner
-import org.jetbrains.kotlin.test.helper.gradle.runGradleCommandLine
+import org.jetbrains.kotlin.test.helper.gradle.*
 import org.jetbrains.kotlin.test.helper.services.TestDataRunnerService
 import org.jetbrains.kotlin.test.helper.ui.WidthAdjustingPanel
 import java.util.concurrent.Callable
@@ -64,7 +55,6 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
     val debugAction = RunAction("Debug", AllIcons.Actions.StartDebugger, debug = true)
     val runAndApply = RunSelectedAndApplyAction()
     val goToAction: GoToDeclaration = GoToDeclaration()
-    val runAllTestsAction: RunAllTestsAction = RunAllTestsAction()
     val moreActionsGroup = MoreActionsGroup()
 
     val state: State = State()
@@ -322,17 +312,6 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
 
     }
 
-    inner class RunAllTestsAction : GradleOnlyAction(
-        "Run All...",
-        "Run all tests via gradle",
-        AllIcons.RunConfigurations.Junit
-    ), DumbAware {
-        override fun actionPerformed(e: AnActionEvent) {
-            e.project?.service<TestDataRunnerService>()
-                ?.collectAndRunAllTests(e, listOf(baseEditor.file), debug = false)
-        }
-    }
-
     inner class MoreActionsGroup : ActionGroup(
         "More",
         "More actions",
@@ -350,54 +329,49 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
             return ActionUpdateThread.BGT
         }
 
-        private val actions = arrayOf(
-            object : AnAction("Reload Tests", null, AllIcons.Actions.Refresh), DumbAware {
-                override fun actionPerformed(e: AnActionEvent) {
-                    state.updateTestsList()
-                }
-            },
-            object : AnAction("Generate Tests", null, AllIcons.Actions.GeneratedFolder), DumbAware {
-                override fun actionPerformed(e: AnActionEvent) {
-                    val (commandLine, title) = generateTestsCommandLine()
-                    val config =
-                        GradleRunConfig(commandLine, title, useProjectBasePath = true, runAsTest = false, debug = false)
-                    runGradleCommandLine(e, config)
-                }
-            },
-            object : GradleOnlyAction("Run All && Apply Diffs", null, ActionIcons.RunAndApply), DumbAware {
-                override fun actionPerformed(e: AnActionEvent) {
-                    ActionUtil.performAction(RunAllAndApplyDiffsAction(), e)
-                }
-            },
-            object : GradleOnlyAction("Generate Tests, Run All && Apply Diffs", null, ActionIcons.RunAndApply), DumbAware {
-                override fun actionPerformed(e: AnActionEvent) {
-                    val project = e.project ?: return
-                    val service = project.service<TestDataRunnerService>()
-                    service.launchExclusively {
-                        withBackgroundProgress(project, "Generating Tests, Running All & Applying Diffs") {
-                            reportSequentialProgress { reporter ->
-                                reporter.nextStep(33)
-                                reporter.nextStep(66, "Generating Tests") {
-                                    generateTestsAndWait(project, listOf(baseEditor.file))
-                                }
+        private val actions = run {
+            val actionManager = ActionManager.getInstance()
+            arrayOf(
+                object : AnAction("Reload Tests", null, AllIcons.Actions.Refresh), DumbAware {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        state.updateTestsList()
+                    }
+                },
+                object : AnAction("Generate Tests", null, AllIcons.Actions.GeneratedFolder), DumbAware {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        val (commandLine, title) = generateTestsCommandLine()
+                        val config =
+                            GradleRunConfig(commandLine, title, useProjectBasePath = true, runAsTest = false, debug = false)
+                        runGradleCommandLine(e, config)
+                    }
+                },
+                actionManager.getAction("RunAllAndApplyDiffs"),
+                object : GradleOnlyAction("Generate Tests, Run All && Apply Diffs", null, ActionIcons.RunAndApply), DumbAware {
+                    override fun actionPerformed(e: AnActionEvent) {
+                        val project = e.project ?: return
+                        val service = project.service<TestDataRunnerService>()
+                        service.launchExclusively {
+                            withBackgroundProgress(project, "Generating Tests, Running All & Applying Diffs") {
+                                reportSequentialProgress { reporter ->
+                                    reporter.nextStep(33)
+                                    reporter.nextStep(66, "Generating Tests") {
+                                        generateTestsAndWait(project, listOf(baseEditor.file))
+                                    }
 
-                                reporter.nextStep(100, "Running All Tests") {
-                                    runTestAndApplyDiffLoop(project) {
-                                        service.doCollectAndRunAllTests(e, listOf(baseEditor.file), debug = false)
+                                    reporter.nextStep(100, "Running All Tests") {
+                                        runTestAndApplyDiffLoop(project) {
+                                            service.doCollectAndRunAllTests(e, listOf(baseEditor.file), debug = false)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-            },
-            object : GradleOnlyAction("Run, Apply Diffs && Commit", null, AllIcons.Actions.Commit) {
-                override fun actionPerformed(e: AnActionEvent) {
-                    ActionUtil.performAction(CreateReproducerCommitAction(), e)
-                }
-            }
-        )
+                },
+                actionManager.getAction("CreateReproducerCommit"),
+            )
 
+        }
         override fun getChildren(e: AnActionEvent?): Array<AnAction> {
             return actions
         }
