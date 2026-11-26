@@ -44,9 +44,10 @@ follows it until it finishes. It is the same run a GitHub `/dry-run` comment or 
   found in the checkout are skipped. Only the failed tests that were fetched (at most 200) can be re-run, and
   muted tests are included. The run uses the same Gradle command as the `testGlobally` Run Anything action.
 - The branch context menu offers **Launch: Aggregate (master)** and **Launch: Safe Merge Dry Run (Rebase)** for the branch,
-  and "Refresh Branch", which fetches its aggregate builds and safe merges on demand; branches outside the
-  recently checked out ones are fetched only that way. Branches with unfinished launched safe merges keep being
-  refreshed automatically.
+  "Checkout Branch", which checks the branch out in the current repository through the Git plugin's checkout flow
+  (hidden for the checked out branch), and "Refresh Branch", which fetches its aggregate builds and safe merges on
+  demand; branches outside the recently checked out ones are fetched only that way. Branches with unfinished
+  launched safe merges keep being refreshed automatically.
 - A branch with an open or merged pull request in `JetBrains/kotlin` shows the GitHub logo to the right of its name; its
   context menu offers "Open Pull Request" to open it in the browser and "Open Pull Request in IDE" to open it in the
   GitHub plugin's "Pull requests" tool window; the latter is hidden until the GitHub integration is installed and

@@ -39,6 +39,7 @@ import com.intellij.util.text.DateFormatUtil
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.intellij.xml.util.XmlStringUtil
+import git4idea.branch.GitBrancher
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
 import kotlinx.coroutines.*
@@ -265,6 +266,7 @@ private class RemoteRunToolWindowPanel(
                 MyBundle.message("teamcity.toolwindow.bot.safe.merge.description"),
                 SafeMergeIcons.SafeMerge,
             ),
+            CheckoutBranchAction(),
             RefreshBranchAction(),
         )
         val runExecutor = DefaultRunExecutor.getRunExecutorInstance()
@@ -811,6 +813,30 @@ private class RemoteRunToolWindowPanel(
         override fun actionPerformed(e: AnActionEvent) {
             val branchName = selectedBranchName() ?: return
             TeamCityTestLaunchService.getInstance(project).launchSafeMergeDryRun(branchName)
+        }
+    }
+
+    /* Context menu action: checks out the right-clicked branch in the current repository. */
+    private inner class CheckoutBranchAction : AnAction(
+        MyBundle.message("teamcity.toolwindow.checkout.branch.text"),
+        MyBundle.message("teamcity.toolwindow.checkout.branch.description"),
+        AllIcons.Actions.CheckOut,
+    ), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        /* The branch that is already checked out offers nothing to check out. */
+        override fun update(e: AnActionEvent) {
+            val branchName = selectedBranchName()
+            e.presentation.isVisible = branchName != null && branchName != project.currentBranchName()
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val repository = project.kotlinMonorepoRepository() ?: return
+            val branchName = selectedBranchName() ?: return
+
+            /* GitBrancher runs the Git plugin's own checkout flow: it proposes the smart
+               checkout when local changes conflict and reports errors itself. */
+            GitBrancher.getInstance(project).checkout(branchName, false, listOf(repository), null)
         }
     }
 
