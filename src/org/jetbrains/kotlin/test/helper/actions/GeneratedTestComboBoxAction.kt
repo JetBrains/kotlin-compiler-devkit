@@ -94,7 +94,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                             setSelectionAndRefresh(item)
                         }
                     },
-                    object : AnAction("Run Selected && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts) {
+                    object : AnAction("Run Selected && Apply Diffs", null, ActionIcons.RunAndApply) {
                         override fun actionPerformed(e: AnActionEvent) {
                             runAndApply(e, item)
                             setSelectionAndRefresh(item)
@@ -302,7 +302,7 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
         }
     }
 
-    inner class RunSelectedAndApplyAction : AbstractRunAction("Run Selected && Apply Diffs", AllIcons.Diff.ApplyNotConflicts) {
+    inner class RunSelectedAndApplyAction : AbstractRunAction("Run Selected && Apply Diffs", ActionIcons.RunAndApply) {
         override fun actionPerformed(e: AnActionEvent) {
             val className = state.methodsClassNames.elementAtOrNull(state.currentChosenGroup) ?: return
             runAndApply(e, className)
@@ -364,12 +364,12 @@ class GeneratedTestComboBoxAction(val baseEditor: TextEditor) : AbstractComboBox
                     runGradleCommandLine(e, config)
                 }
             },
-            object : GradleOnlyAction("Run All && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts), DumbAware {
+            object : GradleOnlyAction("Run All && Apply Diffs", null, ActionIcons.RunAndApply), DumbAware {
                 override fun actionPerformed(e: AnActionEvent) {
                     ActionUtil.performAction(RunAllAndApplyDiffsAction(), e)
                 }
             },
-            object : GradleOnlyAction("Generate Tests, Run All && Apply Diffs", null, AllIcons.Diff.ApplyNotConflicts), DumbAware {
+            object : GradleOnlyAction("Generate Tests, Run All && Apply Diffs", null, ActionIcons.RunAndApply), DumbAware {
                 override fun actionPerformed(e: AnActionEvent) {
                     val project = e.project ?: return
                     val service = project.service<TestDataRunnerService>()

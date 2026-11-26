@@ -4,6 +4,7 @@ import com.intellij.execution.Executor
 import com.intellij.execution.ExecutorRegistry
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
+import org.jetbrains.kotlin.test.helper.actions.ActionIcons
 import javax.swing.Icon
 
 class RunAndApplyDiffsExecutor : Executor() {
@@ -20,9 +21,9 @@ class RunAndApplyDiffsExecutor : Executor() {
     }
 
     override fun getToolWindowId(): String = "Run"
-    override fun getToolWindowIcon(): Icon = AllIcons.Diff.ApplyNotConflicts
-    override fun getIcon(): Icon = AllIcons.Diff.ApplyNotConflicts
-    override fun getDisabledIcon(): Icon = AllIcons.Diff.ApplyNotConflicts
+    override fun getToolWindowIcon(): Icon = ActionIcons.RunAndApply
+    override fun getIcon(): Icon = ActionIcons.RunAndApply
+    override fun getDisabledIcon(): Icon = ActionIcons.RunAndApply
     override fun getDescription(): String = "Run and apply diffs on test failures"
     override fun getActionName(): String = "Run and Apply Diffs"
     override fun getId(): String = EXECUTOR_ID

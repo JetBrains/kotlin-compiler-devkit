@@ -176,7 +176,7 @@
                     class="org.jetbrains.kotlin.test.helper.actions.RunSelectedAndApplyDiffsAction"
                     text="Run Specific Tests and Apply Diffs"
                     description="Runs specific tests and applies all diffs."
-                    icon="AllIcons.Diff.ApplyNotConflicts">
+                    icon="org.jetbrains.kotlin.test.helper.actions.ActionIcons.RunAndApply">
             </action>
         </group>
 
@@ -207,7 +207,7 @@
                     class="org.jetbrains.kotlin.test.helper.actions.RunAllAndApplyDiffsAction"
                     text="Run All Tests and Apply Diffs"
                     description="Runs all tests and applies all diffs."
-                    icon="AllIcons.Diff.ApplyNotConflicts">
+                    icon="org.jetbrains.kotlin.test.helper.actions.ActionIcons.RunAndApply">
             </action>
             <action
                     id="CreateReproducerCommit"
