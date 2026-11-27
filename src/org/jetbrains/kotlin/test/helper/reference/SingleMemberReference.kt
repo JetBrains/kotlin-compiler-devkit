@@ -2,10 +2,8 @@ package org.jetbrains.kotlin.test.helper.reference
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementResolveResult
-import com.intellij.psi.PsiField
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReferenceBase
 import com.intellij.psi.ResolveResult
@@ -13,15 +11,15 @@ import com.intellij.util.ui.EDT
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.types.KaClassType
-import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.idea.base.analysis.api.utils.analyzeInModalWindow
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtProperty
 
-typealias ClassProvider = (Project) -> Collection<PsiClass>
+typealias ClassProvider = (Project) -> Collection<KtClassOrObject>
 
 /**
- * A PSI reference for resolution to a single field member inside some class
+ * A PSI reference for resolution to a single member declaration inside some Kotlin class
  *
  * @param element The host of the reference
  * @param range Reference text range inside [element]
@@ -55,12 +53,9 @@ class SingleMemberReference(
     }
 }
 
-private fun resolveMember(classes: Collection<PsiClass>, name: String): List<PsiElement> =
+private fun resolveMember(classes: Collection<KtClassOrObject>, name: String): List<PsiElement> =
     classes.mapNotNull { clazz ->
-        clazz.fields
-            .filterIsInstance<PsiField>()
-            .firstOrNull { it.name == name }
-            ?.let { it.unwrapped ?: it }
+        clazz.fieldLikeMembers.firstOrNull { it.name == name }
     }
 
 private val DEPRECATION_SUFFIXES = listOf("_ERROR", "_WARNING")

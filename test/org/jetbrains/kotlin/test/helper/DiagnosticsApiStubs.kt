@@ -57,22 +57,75 @@ internal object DiagnosticsApiStubs {
 
         class KtDiagnosticFactory0(name: String, severity: Severity, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
         class KtDiagnosticFactory1<A>(name: String, severity: Severity, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
+        class KtDiagnosticFactory2<A, B>(name: String, severity: Severity, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
         class KtDiagnosticFactoryForDeprecation0(name: String, featureForError: LanguageFeature, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
         class KtDiagnosticFactoryForDeprecation1<A>(name: String, featureForError: LanguageFeature, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
 
         class KtSourcelessDiagnosticFactory(name: String, severity: Severity, rendererFactory: Any?)
 
+        // Like the real DSL, each delegate function returns a provider whose type determines
+        // the type of the property it's used on, e.g. `val X by deprecationError1<String>(feature)`
+        // has the type `KtDiagnosticFactoryForDeprecation1<String>`.
+        class DiagnosticFactory0DelegateProvider(
+            private val severity: Severity,
+            private val positioningStrategy: SourceElementPositioningStrategy,
+            private val container: KtDiagnosticsContainer,
+        ) {
+            operator fun getValue(thisRef: Any?, property: KProperty<*>): KtDiagnosticFactory0 =
+                KtDiagnosticFactory0(property.name, severity, positioningStrategy, container.getRendererFactory())
+        }
+
+        class DiagnosticFactory1DelegateProvider<A>(
+            private val severity: Severity,
+            private val positioningStrategy: SourceElementPositioningStrategy,
+            private val container: KtDiagnosticsContainer,
+        ) {
+            operator fun getValue(thisRef: Any?, property: KProperty<*>): KtDiagnosticFactory1<A> =
+                KtDiagnosticFactory1(property.name, severity, positioningStrategy, container.getRendererFactory())
+        }
+
+        class DiagnosticFactory2DelegateProvider<A, B>(
+            private val severity: Severity,
+            private val positioningStrategy: SourceElementPositioningStrategy,
+            private val container: KtDiagnosticsContainer,
+        ) {
+            operator fun getValue(thisRef: Any?, property: KProperty<*>): KtDiagnosticFactory2<A, B> =
+                KtDiagnosticFactory2(property.name, severity, positioningStrategy, container.getRendererFactory())
+        }
+
+        class DeprecationDiagnosticFactory1DelegateProvider<A>(
+            private val featureForError: LanguageFeature,
+            private val positioningStrategy: SourceElementPositioningStrategy,
+            private val container: KtDiagnosticsContainer,
+        ) {
+            operator fun getValue(thisRef: Any?, property: KProperty<*>): KtDiagnosticFactoryForDeprecation1<A> =
+                KtDiagnosticFactoryForDeprecation1(property.name, featureForError, positioningStrategy, container.getRendererFactory())
+        }
+
+        class SourcelessDiagnosticFactoryDelegateProvider(
+            private val severity: Severity,
+            private val container: KtDiagnosticsContainer,
+        ) {
+            operator fun getValue(thisRef: Any?, property: KProperty<*>): KtSourcelessDiagnosticFactory =
+                KtSourcelessDiagnosticFactory(property.name, severity, container.getRendererFactory())
+        }
+
+        // For functions that aren't part of the real diagnostics DSL, e.g. plugin-local helpers.
         class DiagnosticFactoryDelegateProvider {
             operator fun getValue(thisRef: Any?, property: KProperty<*>): KtSourcelessDiagnosticFactory =
                 KtSourcelessDiagnosticFactory(property.name, Severity.ERROR, null)
         }
 
-        fun KtDiagnosticsContainer.warning0(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun <A> KtDiagnosticsContainer.error1(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun <A, B> KtDiagnosticsContainer.strongWarning2(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun <A> KtDiagnosticsContainer.deprecationError1(featureForError: LanguageFeature, positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun KtDiagnosticsContainer.strongWarningWithoutSource() = DiagnosticFactoryDelegateProvider()
-        fun KtDiagnosticsContainer.infoWithoutSource() = DiagnosticFactoryDelegateProvider()
+        fun KtDiagnosticsContainer.warning0(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) =
+            DiagnosticFactory0DelegateProvider(Severity.WARNING, positioningStrategy, this)
+        fun <A> KtDiagnosticsContainer.error1(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) =
+            DiagnosticFactory1DelegateProvider<A>(Severity.ERROR, positioningStrategy, this)
+        fun <A, B> KtDiagnosticsContainer.strongWarning2(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) =
+            DiagnosticFactory2DelegateProvider<A, B>(Severity.STRONG_WARNING, positioningStrategy, this)
+        fun <A> KtDiagnosticsContainer.deprecationError1(featureForError: LanguageFeature, positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) =
+            DeprecationDiagnosticFactory1DelegateProvider<A>(featureForError, positioningStrategy, this)
+        fun KtDiagnosticsContainer.strongWarningWithoutSource() = SourcelessDiagnosticFactoryDelegateProvider(Severity.STRONG_WARNING, this)
+        fun KtDiagnosticsContainer.infoWithoutSource() = SourcelessDiagnosticFactoryDelegateProvider(Severity.INFO, this)
         // Arities that don't exist (yet) must be supported too.
         fun <A, B, C, D, E> KtDiagnosticsContainer.error5(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
         // Not a delegate kind, even though it is in the diagnostics package.
