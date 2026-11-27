@@ -33,6 +33,10 @@
 - Show the severity of diagnostics declared in a `KtDiagnosticsContainer` as a colored badge in Quick Documentation,
   together with its KDoc, the language feature of deprecation diagnostics, the positioning strategy, the PSI type and
   the containing container.
+- Add an experimental option to nest the variants of a test data file under its main file in the Project View: `foo.txt`,
+  `foo.fir.txt` and `foo.ll.kt` show up as children of `foo.kt`. It is off by default; turn it on with the
+  `kotlin.compiler.devkit.project.view.nest.test.data.variants` registry key. It applies to the directories under the
+  configured test data files and follows the "File Nesting" option of the Project View.
 
 ## 1.0.113
 - Migrate test data manager actions to the `checkTestData` / `updateTestData` Gradle tasks (options passed as `-P` properties). The removed `manageTestDataGlobally` task is no longer used.

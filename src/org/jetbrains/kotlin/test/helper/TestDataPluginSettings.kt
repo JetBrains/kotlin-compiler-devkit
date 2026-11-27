@@ -17,6 +17,8 @@ import com.intellij.ui.PanelWithButtons
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.panel
+import org.jetbrains.kotlin.test.helper.projectView.isTestDataNestingEnabled
+import org.jetbrains.kotlin.test.helper.projectView.refreshTestDataNesting
 import org.jetbrains.kotlin.test.helper.ui.settings.IgnoredLanguagesForInjectionPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.RelatedFileSearchPathsPanel
 import org.jetbrains.kotlin.test.helper.ui.settings.TestDataPathEntriesPanel
@@ -472,6 +474,7 @@ class TestDataPathsConfigurable(private val project: Project) :
         super.apply()
         val testFederationGutterMarkersChanged =
             configuration.testFederationGutterMarkersEnabled != testFederationGutterMarkersEnabled
+        val testDataPathsChanged = testDataModified(isFiles = true) || testDataModified(isFiles = false)
         configuration.loadState(
             testDataFiles,
             testDataDirectories,
@@ -484,6 +487,9 @@ class TestDataPathsConfigurable(private val project: Project) :
         )
         if (testFederationGutterMarkersChanged) {
             DaemonCodeAnalyzer.getInstance(project).restart("test-federation gutter marker setting changed")
+        }
+        if (testDataPathsChanged && isTestDataNestingEnabled()) {
+            refreshTestDataNesting(project)
         }
         workspaceConfiguration.injectMultifileTestDataFileType = injectMultifileTestDataFileType
     }

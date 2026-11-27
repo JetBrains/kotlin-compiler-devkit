@@ -25,6 +25,13 @@
         <fileEditorProvider implementation="org.jetbrains.kotlin.test.helper.KotlinTestDataFileEditorProvider"/>
         <projectViewPane implementation="org.jetbrains.kotlin.test.helper.domain.DomainProjectViewPane"/>
         <projectViewNodeDecorator implementation="org.jetbrains.kotlin.test.helper.domain.TestFederationIgnoreProjectViewNodeDecorator"/>
+        <!-- After the platform file nesting, which may have nested some files already, and before the Java and Kotlin
+             providers, which keep the nested files of the node they replace. -->
+        <treeStructureProvider implementation="org.jetbrains.kotlin.test.helper.projectView.TestDataNestingTreeStructureProvider"
+                               order="last, after NestingTreeStructureProvider, before ClassesTreeStructureProvider"/>
+        <registryKey key="kotlin.compiler.devkit.project.view.nest.test.data.variants"
+                     defaultValue="false"
+                     description="Kotlin Compiler DevKit (experimental): in the Project View, nest the variants of a test data file (foo.txt, foo.fir.txt, foo.ll.kt) under its main file (foo.kt). Works in the configured test data files only, with the Project View's File Nesting option on."/>
         <projectConfigurable bundle="messages.MyBundle" instance="org.jetbrains.kotlin.test.helper.TestDataPathsConfigurable"
                              key="pluginSettingsDisplayName"/>
 
@@ -334,5 +341,7 @@
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
         <listener class="org.jetbrains.kotlin.test.helper.listeners.NewDiagnosticsTestDataFileListener"
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+        <listener class="org.jetbrains.kotlin.test.helper.projectView.TestDataNestingRegistryListener"
+                  topic="com.intellij.openapi.util.registry.RegistryValueListener"/>
     </applicationListeners>
 </idea-plugin>
