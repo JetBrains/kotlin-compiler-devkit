@@ -10,15 +10,14 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.patterns.PlatformPatterns
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiComment
-import com.intellij.psi.PsiField
 import com.intellij.util.ProcessingContext
-import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.idea.completion.or
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.test.helper.lang.MULTIFILE_COMMENT_LINE
+import org.jetbrains.kotlin.test.helper.reference.fieldLikeMembers
 import org.jetbrains.kotlin.test.helper.reference.getEnumClassesByDirective
 import org.jetbrains.kotlin.test.helper.reference.getFirErrorClasses
 import org.jetbrains.kotlin.test.helper.reference.getInheritors
@@ -71,9 +70,9 @@ class CommentDirectiveCompletionProvider : CompletionProvider<CompletionParamete
         }
     }
 
-    private fun completeToFieldMembers(classes: Collection<PsiClass>, resultSet: CompletionResultSet) {
-        classes.flatMap { it.fields.filterIsInstance<PsiField>() }
-            .mapTo(mutableSetOf()) { it.name }
+    private fun completeToFieldMembers(classes: Collection<KtClassOrObject>, resultSet: CompletionResultSet) {
+        classes.flatMap { it.fieldLikeMembers }
+            .mapNotNullTo(mutableSetOf()) { it.name }
             .forEach { resultSet.addElement(LookupElementBuilder.create(it)) }
     }
 
@@ -84,16 +83,12 @@ class CommentDirectiveCompletionProvider : CompletionProvider<CompletionParamete
         val inheritors = getInheritors(project, DIRECTIVES_CONTAINER_FQ_NAME)
 
         for (clazz in inheritors) {
-            if (clazz !is KtLightClass) continue
-            val properties = clazz.kotlinOrigin
-                ?.declarations
-                ?.filterIsInstance<KtProperty>()
-                ?.filter { it.isDirective() }
-                ?: continue
-
-            properties.forEach { field ->
-                resultSet.addElement(LookupElementBuilder.create(field.name ?: return@forEach))
-            }
+            clazz.declarations
+                .filterIsInstance<KtProperty>()
+                .filter { it.isDirective() }
+                .forEach { directive ->
+                    resultSet.addElement(LookupElementBuilder.create(directive.name ?: return@forEach))
+                }
         }
     }
 

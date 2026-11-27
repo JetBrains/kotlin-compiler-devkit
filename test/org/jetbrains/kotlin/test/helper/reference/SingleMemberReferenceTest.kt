@@ -93,6 +93,31 @@ class SingleMemberReferenceTest : BasePlatformTestCase() {
         assertUnresolved("_ERROR")
     }
 
+    fun testDelegatedDiagnostic() {
+        configure(
+            """
+            package org.example
+
+            import org.jetbrains.kotlin.config.LanguageFeature
+            import org.jetbrains.kotlin.diagnostics.*
+
+            object MyErrors : KtDiagnosticsContainer() {
+                val DELEGATED by error1<String>()
+                val DELEGATED_WARNING by warning0()
+                val DELEGATED_DEPRECATED by deprecationError1<String>(LanguageFeature.ForbidSomething)
+            }
+            """,
+        )
+        assertResolvesTo("DELEGATED", "DELEGATED")
+        assertResolvesTo("DELEGATED_WARNING", "DELEGATED_WARNING")
+        assertResolvesTo("DELEGATED_DEPRECATED", "DELEGATED_DEPRECATED")
+        assertResolvesTo("DELEGATED_DEPRECATED_ERROR", "DELEGATED_DEPRECATED")
+
+        // The suffix resolution only applies to deprecation diagnostics.
+        assertUnresolved("DELEGATED_ERROR")
+        assertUnresolved("DELEGATED_WARNING_ERROR")
+    }
+
     fun testExactNameWins() {
         configure(
             """
