@@ -3,8 +3,10 @@ package org.jetbrains.kotlin.test.helper.projectView
 import com.intellij.ide.projectView.ProjectView
 import com.intellij.ide.projectView.ProjectViewNode
 import com.intellij.ide.projectView.ProjectViewSettings
+import com.intellij.ide.projectView.SelectableTreeStructureProvider
 import com.intellij.ide.projectView.TreeStructureProvider
 import com.intellij.ide.projectView.ViewSettings
+import com.intellij.ide.projectView.impl.ProjectViewState
 import com.intellij.ide.projectView.impl.nodes.FileNodeWithNestedFileNodes
 import com.intellij.ide.projectView.impl.nodes.NestingTreeNode
 import com.intellij.ide.projectView.impl.nodes.PsiFileNode
@@ -18,6 +20,8 @@ import com.intellij.openapi.util.registry.Registry
 import com.intellij.openapi.util.registry.RegistryValue
 import com.intellij.openapi.util.registry.RegistryValueListener
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.test.helper.SUPPORTED_EXTENSIONS
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 import org.jetbrains.kotlin.test.helper.asPathWithoutAllExtensions
@@ -106,6 +110,46 @@ private fun List<PsiFileNode>.findMainNode(baseName: String): PsiFileNode? =
 
 private fun PsiFileNode.nestedPsiFileNodes(): List<PsiFileNode> =
     (this as? FileNodeWithNestedFileNodes)?.nestedFileNodes?.filterIsInstance<PsiFileNode>().orEmpty()
+
+/** The extensions of the files whose node the Kotlin plugin replaces with its own one, see [TestDataNestingSelectInProvider]. */
+private val KOTLIN_EXTENSIONS: Set<String> = setOf("kt", "kts")
+
+/**
+ * Makes "Select in Project View" and autoscroll from source land on the main file for a variant nested under a Kotlin
+ * main file (`foo.txt` under `foo.kt`), instead of selecting nothing.
+ *
+ * The Kotlin plugin replaces the [NestingTreeNode] of a Kotlin file with its own node, which keeps the nested files but
+ * whose `contains()` matches only its own file, so the Project View does not look for the variant inside it. Under
+ * other main files (`foo.args`) the [NestingTreeNode] stays, and its `contains()` lets the variant itself be selected.
+ *
+ * The platform asks the selectable providers in their order and takes the first answer, and the Kotlin plugin answers
+ * for every Kotlin file, so this provider is registered `first`. Its [modify] changes nothing.
+ *
+ * A workaround for KTIJ-41271: remove it once the oldest supported platform has the Kotlin nodes match their nested
+ * files in `contains()`.
+ */
+class TestDataNestingSelectInProvider : SelectableTreeStructureProvider, DumbAware {
+    override fun modify(
+        parent: AbstractTreeNode<*>,
+        children: Collection<AbstractTreeNode<*>>,
+        settings: ViewSettings?,
+    ): Collection<AbstractTreeNode<*>> = children
+
+    override fun getTopLevelElement(element: PsiElement): PsiElement? {
+        if (!isTestDataNestingEnabled()) return null
+        val file = element.containingFile?.virtualFile ?: return null
+        val project = element.project
+        if (!project.getService(ProjectViewState::class.java).useFileNestingRules) return null
+        val directory = file.parent ?: return null
+        if (!TestDataPathsConfiguration.getInstance(project).containsTestDataFilesIn(directory)) return null
+        val main = findMainFile(file.name.asPathWithoutAllExtensions, directory) ?: return null
+        if (main == file || main.extension !in KOTLIN_EXTENSIONS) return null
+        return PsiManager.getInstance(project).findFile(main)
+    }
+
+    private fun findMainFile(baseName: String, directory: VirtualFile): VirtualFile? =
+        SUPPORTED_EXTENSIONS.firstNotNullOfOrNull { extension -> directory.findChild("$baseName.$extension") }
+}
 
 /**
  * Rebuilds the Project View when [TEST_DATA_NESTING_REGISTRY_KEY] changes, so the nesting shows up without a reopen.

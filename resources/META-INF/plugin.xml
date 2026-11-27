@@ -29,6 +29,9 @@
              providers, which keep the nested files of the node they replace. -->
         <treeStructureProvider implementation="org.jetbrains.kotlin.test.helper.projectView.TestDataNestingTreeStructureProvider"
                                order="last, after NestingTreeStructureProvider, before ClassesTreeStructureProvider"/>
+        <!-- First: the platform takes the first selectable provider's answer, and the Kotlin one answers for Kotlin files. -->
+        <treeStructureProvider implementation="org.jetbrains.kotlin.test.helper.projectView.TestDataNestingSelectInProvider"
+                               order="first"/>
         <registryKey key="kotlin.compiler.devkit.project.view.nest.test.data.variants"
                      defaultValue="false"
                      description="Kotlin Compiler DevKit (experimental): in the Project View, nest the variants of a test data file (foo.txt, foo.fir.txt, foo.ll.kt) under its main file (foo.kt). Works in the configured test data files only, with the Project View's File Nesting option on."/>

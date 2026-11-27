@@ -2,7 +2,9 @@ package org.jetbrains.kotlin.test.helper.projectView
 
 import com.intellij.ide.projectView.ProjectViewNode
 import com.intellij.ide.projectView.ProjectViewSettings
+import com.intellij.ide.projectView.SelectableTreeStructureProvider
 import com.intellij.ide.projectView.ViewSettings
+import com.intellij.ide.projectView.impl.ProjectViewState
 import com.intellij.ide.projectView.impl.nodes.FileNodeWithNestedFileNodes
 import com.intellij.ide.projectView.impl.nodes.NestingTreeNode
 import com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode
@@ -11,6 +13,8 @@ import com.intellij.ide.util.treeView.AbstractTreeNode
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.projectView.TestProjectTreeStructure
 import com.intellij.psi.PsiDirectory
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.jetbrains.kotlin.test.helper.TestDataPathsConfiguration
 
@@ -165,6 +169,57 @@ class TestDataNestingTreeStructureProviderTest : BasePlatformTestCase() {
     private fun assertKeepsChildren(directory: PsiDirectory, settings: ViewSettings = nestingSettings) {
         val children = fileNodes(directory)
         assertSame(children, TestDataNestingTreeStructureProvider().modify(directoryNode(directory), children, settings))
+    }
+
+    /**
+     * Asks the registered selectable providers in their order and takes the first answer, like
+     * `ProjectViewSelectInTarget.select` does, so the Kotlin provider, which answers for Kotlin files, is asked too.
+     */
+    fun testSelectInVariantOfKotlinMainFileSelectsTheMainFile() {
+        val directory = addFiles("testData", "foo.fir.kt", "foo.kt", "foo.txt")
+        val text = myFixture.addFileToProject("testData/bar.txt", "text")
+        addFiles("testData", "bar.kts")
+        configureTestDataFiles()
+
+        assertEquals("foo.kt", selectedFileName(directory.findFile("foo.txt")!!))
+        assertEquals("foo.kt", selectedFileName(directory.findFile("foo.fir.kt")!!))
+        assertEquals("bar.kts", selectedFileName(text.findElementAt(0)!!))
+    }
+
+    fun testSelectInKeepsMainFilesAndVariantsOfOtherMainFiles() {
+        val directory = addFiles("testData", "bar.args", "bar.txt", "foo.kt", "single.txt")
+        configureTestDataFiles()
+
+        for (name in listOf("bar.txt", "foo.kt", "single.txt")) {
+            assertNull(name, TestDataNestingSelectInProvider().getTopLevelElement(directory.findFile(name)!!))
+        }
+    }
+
+    fun testSelectInKeepsVariantsWhenDisabledOrOutsideTestData() {
+        val directory = addFiles("testData", "foo.kt", "foo.txt")
+        val outside = addFiles("testData2", "foo.kt", "foo.txt")
+        configureTestDataFiles()
+        val variant = directory.findFile("foo.txt")!!
+        assertNotNull(TestDataNestingSelectInProvider().getTopLevelElement(variant))
+
+        assertNull(TestDataNestingSelectInProvider().getTopLevelElement(outside.findFile("foo.txt")!!))
+
+        val projectViewState = project.getService(ProjectViewState::class.java)
+        projectViewState.useFileNestingRules = false
+        try {
+            assertNull(TestDataNestingSelectInProvider().getTopLevelElement(variant))
+        } finally {
+            projectViewState.useFileNestingRules = true
+        }
+
+        Registry.get(TEST_DATA_NESTING_REGISTRY_KEY).setValue(false)
+        assertNull(TestDataNestingSelectInProvider().getTopLevelElement(variant))
+    }
+
+    private fun selectedFileName(element: PsiElement): String? {
+        val providers = TestProjectTreeStructure(project, testRootDisposable).providers.orEmpty()
+        val selected = providers.filterIsInstance<SelectableTreeStructureProvider>().firstNotNullOfOrNull { it.getTopLevelElement(element) }
+        return (selected as? PsiFile)?.name
     }
 
     private fun modify(directory: PsiDirectory): Collection<AbstractTreeNode<*>> =
