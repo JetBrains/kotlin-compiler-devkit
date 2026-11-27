@@ -1,5 +1,6 @@
 <idea-plugin>
     <extensions defaultExtensionNs="com.intellij">
-        <mcpServer.mcpToolset implementation="org.jetbrains.kotlin.test.helper.mcp.RunApplyMcpTools" />
+<!--        The MCP is empty right now, so fails at runtime during the initialization -->
+<!--        <mcpServer.mcpToolset implementation="org.jetbrains.kotlin.test.helper.mcp.RunApplyMcpTools" />-->
     </extensions>
 </idea-plugin>
