@@ -62,24 +62,22 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.config.LanguageFeature.ForbidSomething
             import org.jetbrains.kotlin.diagnostics.*
             import org.jetbrains.kotlin.diagnostics.Severity.ERROR
-            import org.jetbrains.kotlin.diagnostics.KtNamedDeclaration as Named
 
             object MyErrors : KtDiagnosticsContainer() {
-                val ERR: KtDiagnosticFactory0 = KtDiagnosticFactory0("ERR", ERROR, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val STRONG: KtDiagnosticFactory1<String> = KtDiagnosticFactory1("STRONG", Severity.STRONG_WARNING, SourceElementPositioningStrategies.DECLARATION_NAME, Named::class, getRendererFactory())
-                val NAMED: KtDiagnosticFactory0 = KtDiagnosticFactory0(name = "NAMED", psiType = PsiElement::class, severity = Severity.INFO, defaultPositioningStrategy = SourceElementPositioningStrategies.DEFAULT, rendererFactory = getRendererFactory())
-                val DEPRECATED: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("DEPRECATED", ForbidSomething, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val OTHER: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("OTHER", LanguageFeature.ForbidOther, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val EXPERIMENTAL: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("EXPERIMENTAL", LanguageFeature.NotYetEnabled, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val UNKNOWN_VERSION: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("UNKNOWN_VERSION", LanguageFeature.ForbidLatest, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val UNKNOWN_FEATURE: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("UNKNOWN_FEATURE", LOCAL_FEATURE, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val INDIRECT: KtDiagnosticFactory0 = KtDiagnosticFactory0("INDIRECT", ERROR, LOCAL_STRATEGY, LOCAL_PSI_TYPE, getRendererFactory())
+                val ERR: KtDiagnosticFactory0 = KtDiagnosticFactory0("ERR", ERROR, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val STRONG: KtDiagnosticFactory1<String> = KtDiagnosticFactory1("STRONG", Severity.STRONG_WARNING, SourceElementPositioningStrategies.DECLARATION_NAME, getRendererFactory())
+                val NAMED: KtDiagnosticFactory0 = KtDiagnosticFactory0(name = "NAMED", severity = Severity.INFO, defaultPositioningStrategy = SourceElementPositioningStrategies.DEFAULT, rendererFactory = getRendererFactory())
+                val DEPRECATED: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("DEPRECATED", ForbidSomething, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val OTHER: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("OTHER", LanguageFeature.ForbidOther, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val EXPERIMENTAL: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("EXPERIMENTAL", LanguageFeature.NotYetEnabled, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val UNKNOWN_VERSION: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("UNKNOWN_VERSION", LanguageFeature.ForbidLatest, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val UNKNOWN_FEATURE: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("UNKNOWN_FEATURE", LOCAL_FEATURE, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val INDIRECT: KtDiagnosticFactory0 = KtDiagnosticFactory0("INDIRECT", ERROR, LOCAL_STRATEGY, getRendererFactory())
                 val SOURCELESS: KtSourcelessDiagnosticFactory = KtSourcelessDiagnosticFactory("SOURCELESS", Severity.INFO, getRendererFactory())
                 val NOT_A_DIAGNOSTIC: Int = 42
             }
 
             private val LOCAL_STRATEGY = SourceElementPositioningStrategies.DEFAULT
-            private val LOCAL_PSI_TYPE = PsiElement::class
             private val LOCAL_FEATURE = LanguageFeature.ForbidOther
             """,
         )
@@ -89,7 +87,7 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
         assertTrue(err, err.contains("ERR"))
         assertBadges(err, "ERROR")
         assertRow(err, "Positioning:", "DEFAULT")
-        assertRow(err, "PSI type:", "PsiElement")
+        assertNoRow(err, "PSI type:")
         assertTrue(err, err.contains("<hr/>"))
         assertRow(err, "Defined in:", "org.example.MyErrors")
         assertNoRow(err, "Error since:")
@@ -97,8 +95,6 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
         val strong = documentation("STRONG")
         assertBadges(strong, "STRONG WARNING")
         assertRow(strong, "Positioning:", "DECLARATION_NAME")
-        // Resolved, not taken from the text of the class literal.
-        assertRow(strong, "PSI type:", "KtNamedDeclaration")
 
         assertBadges(documentation("NAMED"), "INFO")
 
@@ -114,12 +110,10 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
 
         val indirect = documentation("INDIRECT")
         assertRow(indirect, "Positioning:", "???")
-        assertRow(indirect, "PSI type:", "???")
 
         val sourceless = documentation("SOURCELESS")
         assertBadges(sourceless, "INFO")
         assertNoRow(sourceless, "Positioning:")
-        assertNoRow(sourceless, "PSI type:")
 
         assertNotDiagnostic("NOT_A_DIAGNOSTIC")
     }
@@ -130,7 +124,7 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object NotAContainer {
-                val ERR: KtDiagnosticFactory0 = KtDiagnosticFactory0("ERR", Severity.ERROR, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, null)
+                val ERR: KtDiagnosticFactory0 = KtDiagnosticFactory0("ERR", Severity.ERROR, SourceElementPositioningStrategies.DEFAULT, null)
             }
             """,
         )
@@ -162,27 +156,27 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val ERR by error1<KtElement, String>(SourceElementPositioningStrategies.VISIBILITY_MODIFIER)
-                val WARN by warning0<PsiElement>()
-                val STRONG by strongWarning2<KtNamedDeclaration, String, String>()
-                val DEPRECATED by deprecationError1<PsiElement, String>(LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DECLARATION_NAME)
-                val NAMED by error1<KtElement, String>(positioningStrategy = SourceElementPositioningStrategies.DECLARATION_NAME)
+                val ERR by error1<String>(SourceElementPositioningStrategies.VISIBILITY_MODIFIER)
+                val WARN by warning0()
+                val STRONG by strongWarning2<String, String>()
+                val DEPRECATED by deprecationError1<String>(LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DECLARATION_NAME)
+                val NAMED by error1<String>(positioningStrategy = SourceElementPositioningStrategies.DECLARATION_NAME)
                 val SOURCELESS: KtSourcelessDiagnosticFactory by strongWarningWithoutSource()
                 val INFO_SOURCELESS by infoWithoutSource()
-                val ERR5 by error5<PsiElement, String, String, String, String, String>()
-                val NOT_A_DELEGATE_KIND by errorX<PsiElement>()
+                val ERR5 by error5<String, String, String, String, String>()
+                val NOT_A_DELEGATE_KIND by errorX<String>()
                 val LOCAL_INFO by info1<String>(SourceElementPositioningStrategies.DEFAULT)
                 val NOT_A_DIAGNOSTIC by lazy { 42 }
 
                 val strategy = SourceElementPositioningStrategies.DECLARATION_NAME
-                val LOCAL_VARIABLE by error1<KtElement, String>(strategy)
+                val LOCAL_VARIABLE by error1<String>(strategy)
                 val feature = LanguageFeature.ForbidSomething
-                val UNKNOWN_FEATURE by deprecationError1<PsiElement, String>(feature)
-                val OTHER_OBJECT by error1<KtElement, String>(MyPositioningStrategies.CUSTOM)
+                val UNKNOWN_FEATURE by deprecationError1<String>(feature)
+                val OTHER_OBJECT by error1<String>(MyPositioningStrategies.CUSTOM)
             }
 
             object MyPositioningStrategies {
-                val CUSTOM = AbstractSourceElementPositioningStrategy()
+                val CUSTOM = SourceElementPositioningStrategy()
             }
 
             /** A plugin-local helper, like the one in the DataFrame plugin: must not be recognized. */
@@ -195,18 +189,15 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
         val err = documentation("ERR")
         assertBadges(err, "ERROR")
         assertRow(err, "Positioning:", "VISIBILITY_MODIFIER")
-        assertRow(err, "PSI type:", "KtElement")
         assertRow(err, "Defined in:", "org.example.MyErrors")
 
         val warn = documentation("WARN")
         assertBadges(warn, "WARNING")
         // The argument is omitted.
         assertRow(warn, "Positioning:", "DEFAULT")
-        assertRow(warn, "PSI type:", "PsiElement")
 
         val strong = documentation("STRONG")
         assertBadges(strong, "STRONG WARNING")
-        assertRow(strong, "PSI type:", "KtNamedDeclaration")
 
         val deprecated = documentation("DEPRECATED")
         assertBadges(deprecated, "WARNING", "ERROR")
@@ -222,7 +213,6 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
         val sourceless = documentation("SOURCELESS")
         assertBadges(sourceless, "STRONG WARNING")
         assertNoRow(sourceless, "Positioning:")
-        assertNoRow(sourceless, "PSI type:")
         assertBadges(documentation("INFO_SOURCELESS"), "INFO")
 
         assertRow(documentation("LOCAL_VARIABLE"), "Positioning:", "???")
@@ -234,7 +224,6 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
         val err5 = documentation("ERR5")
         assertBadges(err5, "ERROR")
         assertRow(err5, "Positioning:", "DEFAULT")
-        assertRow(err5, "PSI type:", "PsiElement")
         assertNotDiagnostic("NOT_A_DIAGNOSTIC")
     }
 
@@ -242,11 +231,10 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
         configure(
             """
             import org.jetbrains.kotlin.diagnostics.KtDiagnosticsContainer
-            import org.jetbrains.kotlin.diagnostics.PsiElement
             import org.jetbrains.kotlin.diagnostics.error1 as anError
 
             object MyErrors : KtDiagnosticsContainer() {
-                val ALIASED by anError<PsiElement, String>()
+                val ALIASED by anError<String>()
             }
             """,
         )
@@ -265,9 +253,9 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
                  *
                  * @see NOT_DOCUMENTED
                  */
-                val DOCUMENTED by deprecationError1<PsiElement, String>(LanguageFeature.ForbidSomething)
+                val DOCUMENTED by deprecationError1<String>(LanguageFeature.ForbidSomething)
 
-                val NOT_DOCUMENTED by warning0<PsiElement>()
+                val NOT_DOCUMENTED by warning0()
             }
             """,
         )
@@ -304,7 +292,7 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val SOME_WARNING by warning0<PsiElement>()
+                val SOME_WARNING by warning0()
             }
             """,
         )
@@ -326,7 +314,7 @@ class DiagnosticDocumentationTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val SOME_WARNING by warning0<PsiElement>()
+                val SOME_WARNING by warning0()
             }
             """,
         )

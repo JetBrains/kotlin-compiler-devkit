@@ -28,8 +28,6 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaEnumEntrySymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
-import org.jetbrains.kotlin.analysis.api.types.KaClassType
-import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.idea.highlighting.kdoc.KDocRenderer.renderKDoc
 import org.jetbrains.kotlin.kdoc.psi.impl.KDocSection
@@ -38,7 +36,6 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtCallExpression
-import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtExpression
@@ -49,7 +46,7 @@ import javax.swing.Icon
 
 /**
  * Provides quick documentation for diagnostics declared in `KtDiagnosticsContainer`s, either as factories
- * (e.g. `FirErrors.UNRESOLVED_REFERENCE`) or via delegates (e.g. `val FOO by error1<PsiElement, String>()`),
+ * (e.g. `FirErrors.UNRESOLVED_REFERENCE`) or via delegates (e.g. `val FOO by error1<String>()`),
  * with a severity badge (ERROR / WARNING / ...) in the top right corner.
  *
  * The documentation is rendered by this plugin itself, since there is no public API to decorate the documentation
@@ -245,11 +242,6 @@ private fun renderDiagnosticDocumentation(
             DiagnosticDeclaration.PositioningStrategy.Unknown -> add("Positioning:" to "???")
             null -> {}
         }
-        when (val psiType = declaration.psiType) {
-            is DiagnosticDeclaration.PsiType.Known -> add("PSI type:" to psiType.classId.shortClassName.asString())
-            DiagnosticDeclaration.PsiType.Unknown -> add("PSI type:" to "???")
-            null -> {}
-        }
     }
 
     // Between the definition and the sections, like in the regular documentation.
@@ -286,7 +278,7 @@ private fun String.escapeHtml(): String =
  * - a factory in a `KtDiagnosticsContainer`: `val X: KtDiagnosticFactory0 = KtDiagnosticFactory0("X", ERROR, ...)`
  *   or `val X = KtSourcelessDiagnosticFactory("X", Severity.INFO, ...)`;
  * - a delegate from `org.jetbrains.kotlin.diagnostics` in a `KtDiagnosticsContainer`:
- *   `val X by error1<PsiElement, String>(SourceElementPositioningStrategies.DEFAULT)`.
+ *   `val X by error1<String>(SourceElementPositioningStrategies.DEFAULT)`.
  *
  * Declarations are recognized by resolving the calls, so only the real APIs are supported
  * (e.g. a plugin-local `info1` function is not).
@@ -297,16 +289,7 @@ private data class DiagnosticDeclaration(
     val severity: DiagnosticSeverityInfo,
     /** `null` if the diagnostic has no positioning strategy, e.g. `strongWarningWithoutSource()`. */
     val positioningStrategy: PositioningStrategy?,
-    /** `null` if the diagnostic has no PSI element, e.g. `strongWarningWithoutSource()`. */
-    val psiType: PsiType?,
 ) {
-    sealed interface PsiType {
-        data class Known(val classId: ClassId) : PsiType
-
-        /** E.g. the class literal is saved to a variable first. */
-        data object Unknown : PsiType
-    }
-
     sealed interface PositioningStrategy {
         /** A property of `SourceElementPositioningStrategies`, e.g. `DEFAULT`. */
         data class Known(val name: Name) : PositioningStrategy
@@ -342,7 +325,6 @@ private data class DiagnosticDeclaration(
         private val LANGUAGE_FEATURE_CLASS_ID = ClassId(CONFIG_PACKAGE, Name.identifier("LanguageFeature"))
         private val LANGUAGE_VERSION_CLASS_ID = ClassId(CONFIG_PACKAGE, Name.identifier("LanguageVersion"))
         private val POSITIONING_STRATEGIES_CLASS_ID = ClassId(DIAGNOSTICS_PACKAGE, Name.identifier("SourceElementPositioningStrategies"))
-        private val KCLASS_CLASS_ID = ClassId(FqName("kotlin.reflect"), Name.identifier("KClass"))
 
         private val REGULAR_FACTORY_REGEX = Regex("KtDiagnosticFactory\\d+")
         private val DEPRECATION_FACTORY_REGEX = Regex("KtDiagnosticFactoryForDeprecation\\d+")
@@ -354,7 +336,6 @@ private data class DiagnosticDeclaration(
         private val FEATURE_FOR_ERROR = Name.identifier("featureForError")
         private val DEFAULT_POSITIONING_STRATEGY = Name.identifier("defaultPositioningStrategy")
         private val POSITIONING_STRATEGY = Name.identifier("positioningStrategy")
-        private val PSI_TYPE = Name.identifier("psiType")
 
         /** The default value of the `positioningStrategy` parameter of the delegate functions. */
         private val DEFAULT_STRATEGY = Name.identifier("DEFAULT")
@@ -446,13 +427,12 @@ private data class DiagnosticDeclaration(
                 definitionText = "val $name$type",
                 containerFqName = container.fqName,
                 severity = severity,
-                // Sourceless diagnostics have neither a positioning strategy nor a PSI type.
+                // Sourceless diagnostics have no positioning strategy.
                 positioningStrategy = if (isSourceless) {
                     null
                 } else {
                     arguments[DEFAULT_POSITIONING_STRATEGY]?.let { resolvePositioningStrategy(it) } ?: PositioningStrategy.Unknown
                 },
-                psiType = if (isSourceless) null else arguments[PSI_TYPE]?.let { resolveClassLiteralType(it) } ?: PsiType.Unknown,
             )
             return DiagnosticDeclarationDraft(declaration, languageFeature = languageFeature)
         }
@@ -485,12 +465,6 @@ private data class DiagnosticDeclaration(
                 else -> null
             }
 
-            // The PSI type is the first type parameter of the delegate functions, e.g. `P` in `error1<P : PsiElement, A>`.
-            // Sourceless delegates, e.g. `strongWarningWithoutSource()`, have no type parameters.
-            val psiType = function.typeParameters.firstOrNull()?.let { psiTypeParameter ->
-                functionCall.typeArgumentsMapping[psiTypeParameter]?.let { classIdOf(it) }?.let { PsiType.Known(it) } ?: PsiType.Unknown
-            }
-
             val type = property.typeReference?.text?.let { ": $it" }.orEmpty()
             val typeArguments = call.typeArgumentList?.text.orEmpty()
             val valueArguments = if (call.valueArgumentList != null && call.valueArguments.isEmpty()) "()" else ""
@@ -499,7 +473,6 @@ private data class DiagnosticDeclaration(
                 containerFqName = property.containingClassOrObject?.fqName,
                 severity = severity,
                 positioningStrategy = positioningStrategy,
-                psiType = psiType,
             )
             return DiagnosticDeclarationDraft(declaration, languageFeature)
         }
@@ -553,18 +526,6 @@ private data class DiagnosticDeclaration(
 
         /** Returns the source of an enum entry, taking attached sources into account for compiled declarations. */
         private fun KaEnumEntrySymbol.sourceEntry(): KtEnumEntry? = psi?.navigationElement as? KtEnumEntry
-
-        /** Returns the class referenced by a class literal, e.g. `PsiElement` for `PsiElement::class`. */
-        private fun KaSession.resolveClassLiteralType(expression: KtExpression): PsiType {
-            // Only class literals, e.g. not a variable which has the `KClass<*>` type.
-            if (expression !is KtClassLiteralExpression) return PsiType.Unknown
-            val kClassType = expression.expressionType as? KaClassType ?: return PsiType.Unknown
-            if (kClassType.classId != KCLASS_CLASS_ID) return PsiType.Unknown
-            val classId = kClassType.typeArguments.firstOrNull()?.type?.let { classIdOf(it) } ?: return PsiType.Unknown
-            return PsiType.Known(classId)
-        }
-
-        private fun classIdOf(type: KaType): ClassId? = (type as? KaClassType)?.classId
 
         /**
          * Returns the property of `SourceElementPositioningStrategies` which [expression] refers to directly,
