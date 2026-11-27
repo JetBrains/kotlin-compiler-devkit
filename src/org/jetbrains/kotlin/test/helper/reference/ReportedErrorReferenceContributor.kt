@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.test.helper.lang.MultifileTestDataTextFileImpl
  * - Multiple diagnostics on the same element `<!TYPE_MISMATCH, UNSUPPORTED_FEATURE!>`
  * - Diagnostics with additional metadata `<!UNSUPPORTED_FEATURE("gotcha")!>`.
  *   In such cases, the reference is embedded into the diagnostic name (`UNSUPPORTED_FEATURE`).
+ * - Deprecation diagnostics with a severity suffix (`_ERROR`, `_WARNING`)
  *
  * ### Example:
  * ```kotlin
@@ -64,7 +65,8 @@ class ReportedErrorReferenceContributor : PsiReferenceContributor() {
                                     element,
                                     range,
                                     errorContent,
-                                    ::getFirErrorClasses
+                                    ::getFirErrorClasses,
+                                    resolveDeprecationSuffixes = true,
                                 )
                             )
                         }

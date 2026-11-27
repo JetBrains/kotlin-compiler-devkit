@@ -49,7 +49,8 @@ class DirectiveReferenceContributor : PsiReferenceContributor() {
                                 element,
                                 valueTextRange,
                                 memberShortName,
-                                classProvider
+                                classProvider,
+                                resolveDeprecationSuffixes = name == "DIAGNOSTICS",
                             )
                             refs.add(reference)
                         }
