@@ -39,31 +39,26 @@ internal object DiagnosticsApiStubs {
         package org.jetbrains.kotlin.diagnostics
 
         import org.jetbrains.kotlin.config.LanguageFeature
-        import kotlin.reflect.KClass
         import kotlin.reflect.KProperty
-
-        interface PsiElement
-        interface KtElement : PsiElement
-        interface KtNamedDeclaration : KtElement
 
         enum class Severity { INFO, ERROR, WARNING, FIXED_WARNING, STRONG_WARNING }
 
-        open class AbstractSourceElementPositioningStrategy
+        class SourceElementPositioningStrategy
 
         object SourceElementPositioningStrategies {
-            val DEFAULT = AbstractSourceElementPositioningStrategy()
-            val DECLARATION_NAME = AbstractSourceElementPositioningStrategy()
-            val VISIBILITY_MODIFIER = AbstractSourceElementPositioningStrategy()
+            val DEFAULT = SourceElementPositioningStrategy()
+            val DECLARATION_NAME = SourceElementPositioningStrategy()
+            val VISIBILITY_MODIFIER = SourceElementPositioningStrategy()
         }
 
         abstract class KtDiagnosticsContainer {
             fun getRendererFactory(): Any? = null
         }
 
-        class KtDiagnosticFactory0(name: String, severity: Severity, defaultPositioningStrategy: AbstractSourceElementPositioningStrategy, psiType: KClass<*>, rendererFactory: Any?)
-        class KtDiagnosticFactory1<A>(name: String, severity: Severity, defaultPositioningStrategy: AbstractSourceElementPositioningStrategy, psiType: KClass<*>, rendererFactory: Any?)
-        class KtDiagnosticFactoryForDeprecation0(name: String, featureForError: LanguageFeature, defaultPositioningStrategy: AbstractSourceElementPositioningStrategy, psiType: KClass<*>, rendererFactory: Any?)
-        class KtDiagnosticFactoryForDeprecation1<A>(name: String, featureForError: LanguageFeature, defaultPositioningStrategy: AbstractSourceElementPositioningStrategy, psiType: KClass<*>, rendererFactory: Any?)
+        class KtDiagnosticFactory0(name: String, severity: Severity, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
+        class KtDiagnosticFactory1<A>(name: String, severity: Severity, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
+        class KtDiagnosticFactoryForDeprecation0(name: String, featureForError: LanguageFeature, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
+        class KtDiagnosticFactoryForDeprecation1<A>(name: String, featureForError: LanguageFeature, defaultPositioningStrategy: SourceElementPositioningStrategy, rendererFactory: Any?)
 
         class KtSourcelessDiagnosticFactory(name: String, severity: Severity, rendererFactory: Any?)
 
@@ -72,15 +67,15 @@ internal object DiagnosticsApiStubs {
                 KtSourcelessDiagnosticFactory(property.name, Severity.ERROR, null)
         }
 
-        fun <P : PsiElement> KtDiagnosticsContainer.warning0(positioningStrategy: AbstractSourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun <P : PsiElement, A> KtDiagnosticsContainer.error1(positioningStrategy: AbstractSourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun <P : PsiElement, A, B> KtDiagnosticsContainer.strongWarning2(positioningStrategy: AbstractSourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
-        fun <P : PsiElement, A> KtDiagnosticsContainer.deprecationError1(featureForError: LanguageFeature, positioningStrategy: AbstractSourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
+        fun KtDiagnosticsContainer.warning0(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
+        fun <A> KtDiagnosticsContainer.error1(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
+        fun <A, B> KtDiagnosticsContainer.strongWarning2(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
+        fun <A> KtDiagnosticsContainer.deprecationError1(featureForError: LanguageFeature, positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
         fun KtDiagnosticsContainer.strongWarningWithoutSource() = DiagnosticFactoryDelegateProvider()
         fun KtDiagnosticsContainer.infoWithoutSource() = DiagnosticFactoryDelegateProvider()
         // Arities that don't exist (yet) must be supported too.
-        fun <P : PsiElement, A, B, C, D, E> KtDiagnosticsContainer.error5(positioningStrategy: AbstractSourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
+        fun <A, B, C, D, E> KtDiagnosticsContainer.error5(positioningStrategy: SourceElementPositioningStrategy = SourceElementPositioningStrategies.DEFAULT) = DiagnosticFactoryDelegateProvider()
         // Not a delegate kind, even though it is in the diagnostics package.
-        fun <P : PsiElement> KtDiagnosticsContainer.errorX() = DiagnosticFactoryDelegateProvider()
+        fun <A> KtDiagnosticsContainer.errorX() = DiagnosticFactoryDelegateProvider()
     """.trimIndent()
 }

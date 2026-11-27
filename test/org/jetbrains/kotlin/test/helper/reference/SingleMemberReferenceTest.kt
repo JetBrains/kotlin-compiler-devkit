@@ -47,8 +47,8 @@ class SingleMemberReferenceTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val DEPRECATED: KtDiagnosticFactoryForDeprecation1<String> = KtDiagnosticFactoryForDeprecation1("DEPRECATED", LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
-                val DEPRECATED_FACTORY: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("DEPRECATED_FACTORY", LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
+                val DEPRECATED: KtDiagnosticFactoryForDeprecation1<String> = KtDiagnosticFactoryForDeprecation1("DEPRECATED", LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
+                val DEPRECATED_FACTORY: KtDiagnosticFactoryForDeprecation0 = KtDiagnosticFactoryForDeprecation0("DEPRECATED_FACTORY", LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
             }
             """,
         )
@@ -76,7 +76,7 @@ class SingleMemberReferenceTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val REGULAR: KtDiagnosticFactory1<String> = KtDiagnosticFactory1("REGULAR", Severity.ERROR, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
+                val REGULAR: KtDiagnosticFactory1<String> = KtDiagnosticFactory1("REGULAR", Severity.ERROR, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
             }
             """,
         )
@@ -101,7 +101,7 @@ class SingleMemberReferenceTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val REAL_SUFFIX_ERROR: KtDiagnosticFactory1<String> = KtDiagnosticFactory1("REAL_SUFFIX_ERROR", Severity.ERROR, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
+                val REAL_SUFFIX_ERROR: KtDiagnosticFactory1<String> = KtDiagnosticFactory1("REAL_SUFFIX_ERROR", Severity.ERROR, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
             }
             """,
         )
@@ -118,7 +118,7 @@ class SingleMemberReferenceTest : BasePlatformTestCase() {
             import org.jetbrains.kotlin.diagnostics.*
 
             object MyErrors : KtDiagnosticsContainer() {
-                val DEPRECATED: KtDiagnosticFactoryForDeprecation1<String> = KtDiagnosticFactoryForDeprecation1("DEPRECATED", LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DEFAULT, PsiElement::class, getRendererFactory())
+                val DEPRECATED: KtDiagnosticFactoryForDeprecation1<String> = KtDiagnosticFactoryForDeprecation1("DEPRECATED", LanguageFeature.ForbidSomething, SourceElementPositioningStrategies.DEFAULT, getRendererFactory())
             }
             """,
         )
